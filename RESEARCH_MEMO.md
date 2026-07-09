@@ -43,4 +43,5 @@ A signal is KEPT only if its drift-adjusted alpha is positive net of costs with 
 
 - ~~Confirm the TipRanks export column schema~~ — RESOLVED 2026-07-09 (26-column CSV; `COLUMN_MAP` locked to real headers; Last Rating Date present).
 - ≥ 8 weekly snapshots before a first honest read (a matured 1-month window on enough captures).
+- **Scoring / selection framework** — to be designed next (Fable 5, interview-first) BEFORE the panel matures: see `KICKOFF_scoring-framework.md`. It freezes the fixed scheme grammar + evaluation harness + graduation rule that `analyse.py` will implement.
 - Merge performance: first full-universe merge (~1,987 names) pulls Norgate per name; if the weekly run is slow, cache price/membership or bound history — optimise only if it bites.
