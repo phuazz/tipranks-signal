@@ -1,0 +1,5 @@
+pandas>=2.0
+openpyxl>=3.1          # read the weekly TipRanks .xlsx export
+norgatedata>=1.0.74    # local NDU proxy -- Norgate Platinum, personal-use licence
+exchange_calendars>=4.5  # XNYS sessions; never hand-compute weekdays
+pyarrow>=14            # parquet price/membership cache

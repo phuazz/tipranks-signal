@@ -1,0 +1,14 @@
+# --- IP firewall: vendor-derived values NEVER enter version control ---
+# TipRanks (Ultimate, personal-use) and Norgate (Platinum, personal-use) data.
+# Raw exports live in OneDrive; snapshots / merges / caches stay local-only.
+data/
+*.xlsx
+*.xls
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/

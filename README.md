@@ -1,0 +1,41 @@
+# tipranks-signal
+
+Forward-tested study of **TipRanks analyst signals** as cross-sectional predictors of forward US-equity returns, joined to a **Norgate** point-in-time, survivorship-free, liquid universe.
+
+**Context:** Personal. Single-stock signal work is off-book for Navigo (see the event-studies close-out in `C:\dev\STUDIES_LEDGER.md`). No capital at risk — this is signal research.
+
+## Status
+
+First snapshot captured 2026-07-09 (1,987 names; Mid+Large+Mega, US primary). Ingest and the Norgate merge run on live data; the forward-return analysis is pre-registered but **not yet runnable** (it needs weekly snapshots to accrue). See `RESEARCH_MEMO.md`.
+
+## Why this shape
+
+There is **no API** on either licence (TipRanks Ultimate, Norgate Platinum — both personal-use). History cannot be pulled, so each week's screener is frozen at capture and the panel accrues going forward. That is the honest design: zero signal-side look-ahead by construction. Known priors (Barber–Lehavy–McNichols–Trueman 2001; Womack 1996) say rating *levels* are largely priced in and turnover-heavy, while rating and target *revisions* and their drift carry the edge — so the primary signal is the revision, not the level, and the headline is drift-adjusted alpha, not raw return.
+
+## Data sources
+
+- **TipRanks (Ultimate):** weekly manual Excel export of the Analyst screener → normalised snapshot. Raw `.xlsx` archived to OneDrive; never committed.
+- **Norgate (Platinum, local NDU):** point-in-time S&P 500 / MidCap 400 membership (survivorship-free, delisted included), TOTALRETURN prices, dollar-volume liquidity. Local-only, no CI pulls.
+
+## Weekly operator routine
+
+1. In TipRanks → Screeners → **Stock Screener**, load the saved screen `tipranks-signal weekly` (Market Cap = Mid+Large+Mega, US primary; the signal filters left as Any). Export (CSV or Excel) and save to `OneDrive\Main\tipranks-signal\tipranks_YYYY-MM-DD.csv`. If a future export exceeds one page, drop each page into a dated folder instead.
+2. `python scripts/ingest.py --export "C:\Users\phuaz\OneDrive\Main\tipranks-signal\tipranks_YYYY-MM-DD.csv" --asof YYYY-MM-DD`  (or pass the folder of page-files)
+3. `python scripts/merge_norgate.py --asof YYYY-MM-DD`  (NDU running)
+
+A few minutes weekly. `analyse.py` runs later, once the forward windows mature.
+
+## Setup / checks
+
+```
+pip install -r requirements.txt
+python scripts/ingest.py --selftest        # date + parsing + column-mapping checks
+python scripts/norgate.py --check          # NDU feed gate (needs NDU running)
+```
+
+## Open issues
+
+- Schema confirmed 2026-07-09 (26-column CSV; `COLUMN_MAP` locked). The two unmapped columns (Volume, Avg. Volume (3M)) are skipped by design — Norgate supplies liquidity.
+- Ticker → Norgate symbol resolution is best-effort (class shares); the merge **flags** misses rather than dropping them — review the unmatched list on the first merge.
+
+_Last updated: 2026-07-09._
