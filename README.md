@@ -22,6 +22,7 @@ There is **no API** on either licence (TipRanks Ultimate, Norgate Platinum — b
 1. In TipRanks → Screeners → **Stock Screener**, load the saved screen `tipranks-signal weekly` (Market Cap = Mid+Large+Mega, US primary; the signal filters left as Any). Export (CSV or Excel) and save to `OneDrive\Main\tipranks-signal\tipranks_YYYY-MM-DD.csv`. If a future export exceeds one page, drop each page into a dated folder instead.
 2. `python scripts/ingest.py --export "C:\Users\phuaz\OneDrive\Main\tipranks-signal\tipranks_YYYY-MM-DD.csv" --asof YYYY-MM-DD`  (or pass the folder of page-files)
 3. `python scripts/merge_norgate.py --asof YYYY-MM-DD`  (NDU running)
+4. `python scripts/build_dashboard.py`  → refresh the local monitor; `python scripts/status.py` for accrual.
 
 A few minutes weekly. `analyse.py` runs later, once the forward windows mature.
 
@@ -32,6 +33,17 @@ pip install -r requirements.txt
 python scripts/ingest.py --selftest        # date + parsing + column-mapping checks
 python scripts/norgate.py --check          # NDU feed gate (needs NDU running)
 ```
+
+## Dashboard (private, local — a monitor, not a verdict)
+
+Never published, never Navigo-facing (personal-use firewall). The values are fetched at runtime from `data/` (gitignored); `template.html` carries no data.
+
+```
+python scripts/build_dashboard.py     # writes data/dashboard/dashboard_data.json (gitignored)
+npx serve .                           # open http://localhost:PORT/template.html
+```
+
+Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sector, flow signals, the liquid-universe table) and **Accrual** are live now; **Revision Monitor** lights up at snapshot 2 (week-on-week upgrades / target raises / score deltas — the useful part); **Findings** (the drift-adjusted-alpha read) stays locked until ~8 captures.
 
 ## Open issues
 

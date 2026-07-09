@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TipRanks Signal Monitor — private</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+:root{
+  --bg:#fafaf8; --bg2:#ffffff; --bg3:#f5f5f0; --bg4:#eeeee8; --bg-hover:#f0f0ea;
+  --bd:#e2e0d8; --bd2:#d5d3ca; --bd-strong:#c0beb5;
+  --t1:#1a1a18; --t2:#5c5c56; --t3:#8a8a82; --t4:#b0b0a8;
+  --g:#1a8754; --g2:#22a366; --g-bg:rgba(26,135,84,0.07); --g-bg2:rgba(26,135,84,0.14);
+  --r:#c0392b; --r2:#e74c3c; --r-bg:rgba(192,57,43,0.07); --r-bg2:rgba(192,57,43,0.14);
+  --b:#2563eb; --b2:#3b82f6; --b-bg:rgba(37,99,235,0.06); --b-bg2:rgba(37,99,235,0.12);
+  --a:#b45309; --a-bg:rgba(180,83,9,0.07); --p:#7c3aed; --p-bg:rgba(124,58,237,0.06);
+  --c:#0891b2; --c-bg:rgba(8,145,178,0.06); --pk:#be185d; --pk-bg:rgba(190,24,93,0.06);
+  --serif:'Instrument Serif',Georgia,serif; --sans:'DM Sans',-apple-system,sans-serif;
+  --mono:'JetBrains Mono','SF Mono','Menlo',monospace;
+  --shadow-sm:0 1px 2px rgba(0,0,0,0.04);
+  --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:0 4px 6px rgba(0,0,0,0.05),0 2px 4px rgba(0,0,0,0.04);
+  --radius:8px; --radius-lg:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+.shell{max-width:1520px;margin:0 auto;padding:20px 32px 60px}
+.mono{font-family:var(--mono)}
+.pos{color:var(--g)} .neg{color:var(--r)} .neu{color:var(--t3)}
+
+/* masthead */
+.masthead{padding:28px 0 22px;border-bottom:2px solid var(--t1);display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px}
+.masthead h1{font-family:var(--serif);font-size:32px;font-weight:400;letter-spacing:-0.5px;line-height:1.05}
+.masthead h1 em{font-style:italic;color:var(--t3)}
+.masthead .sub{font-size:13px;color:var(--t2);margin-top:6px;max-width:640px}
+.pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pill{font-size:11px;font-weight:600;letter-spacing:0.4px;padding:5px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
+.pill-live{background:var(--g-bg);color:var(--g);border:1px solid var(--g-bg2)}
+.pill-date{background:var(--bg3);color:var(--t2);border:1px solid var(--bd)}
+.pill-priv{background:#1a1a18;color:#f5f5f0}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--g);display:inline-block}
+
+/* honesty bar */
+.note{margin:16px 0 4px;background:var(--a-bg);border:1px solid rgba(180,83,9,0.22);border-radius:var(--radius);padding:10px 14px;font-size:12.5px;color:#7a4a09}
+.note b{color:var(--a)}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--bd);margin:20px 0 22px;overflow-x:auto}
+.tab{position:relative;background:none;border:none;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--t3);padding:11px 16px;cursor:pointer;white-space:nowrap;min-height:44px}
+.tab:hover{color:var(--t2)}
+.tab.active{color:var(--t1)}
+.tab.active::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:2px;background:var(--t1)}
+.tab .lock{font-size:10px;color:var(--t4);margin-left:5px}
+.pane{display:none} .pane.active{display:block}
+
+/* kpi strip */
+.kpi-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:20px}
+.kpi{background:var(--bg2);padding:14px 16px}
+.kpi-lab{font-size:10px;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;color:var(--t3);margin-bottom:6px}
+.kpi-val{font-family:var(--mono);font-size:23px;font-weight:700;letter-spacing:-0.5px}
+.kpi-sub{font-size:11px;color:var(--t3);margin-top:2px}
+
+/* cards */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.card{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 18px}
+.card h3{font-size:11px;text-transform:uppercase;letter-spacing:0.9px;font-weight:700;color:var(--t2);margin-bottom:4px}
+.card .cap{font-size:11.5px;color:var(--t3);margin-bottom:10px}
+.chart{width:100%;height:250px}
+
+/* table */
+.tbl-tools{display:flex;gap:10px;align-items:center;margin:6px 0 10px;flex-wrap:wrap}
+.tbl-tools input{font-family:var(--sans);font-size:13px;padding:7px 11px;border:1px solid var(--bd2);border-radius:var(--radius);background:var(--bg2);min-width:220px}
+.tbl-tools .hint{font-size:11.5px;color:var(--t3)}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--radius-lg);background:var(--bg2)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+thead th{position:sticky;top:0;background:var(--bg3);text-align:right;padding:9px 11px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--bd2);cursor:pointer;white-space:nowrap}
+thead th.l{text-align:left}
+tbody td{padding:7px 11px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
+tbody td.l{text-align:left;font-family:var(--sans)}
+tbody tr:hover{background:var(--bg-hover)}
+.tk{font-weight:700;color:var(--t1)}
+.co{color:var(--t2);font-size:11.5px}
+.chip{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px}
+.chip-sb{background:var(--g-bg2);color:var(--g)} .chip-mb{background:var(--g-bg);color:var(--g)}
+.chip-h{background:var(--bg3);color:var(--t2)} .chip-s{background:var(--r-bg);color:var(--r)}
+.ss{display:inline-block;min-width:24px;text-align:center;font-weight:700;border-radius:6px;padding:1px 0}
+
+/* staged / locked panes */
+.staged{background:var(--bg2);border:1px dashed var(--bd2);border-radius:var(--radius-lg);padding:40px 28px;text-align:center}
+.staged .big{font-family:var(--serif);font-size:26px;color:var(--t2);margin-bottom:8px}
+.staged p{font-size:13.5px;color:var(--t3);max-width:620px;margin:0 auto 6px}
+.progress{max-width:420px;margin:20px auto 0}
+.ptrack{height:10px;background:var(--bg4);border-radius:999px;overflow:hidden;border:1px solid var(--bd)}
+.pfill{height:100%;background:var(--b);border-radius:999px}
+.pcap{font-size:11.5px;color:var(--t3);margin-top:7px;font-family:var(--mono)}
+.method{text-align:left;max-width:680px;margin:22px auto 0;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--radius);padding:14px 18px;font-size:12.5px;color:var(--t2)}
+.method b{color:var(--t1)} .method code{font-family:var(--mono);font-size:11.5px;background:var(--bg2);padding:1px 5px;border-radius:4px}
+.method li{margin:4px 0 4px 4px;list-style:none}
+.acc-list{font-family:var(--mono);font-size:12.5px;color:var(--t2);margin-top:12px;text-align:left;max-width:420px;margin-left:auto;margin-right:auto}
+.foot{margin-top:26px;font-size:11px;color:var(--t4);border-top:1px solid var(--bd);padding-top:12px}
+@media(max-width:768px){.shell{padding:16px}.grid{grid-template-columns:1fr}.kpi-strip{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="masthead">
+    <div>
+      <h1>TipRanks Signal Monitor <em>— private analyst-consensus cockpit</em></h1>
+      <div class="sub">Weekly TipRanks signals over the Norgate point-in-time liquid universe (S&amp;P 500 + MidCap 400). A <b>monitor</b> of state and change — not a validated edge; that read comes after the panel accrues.</div>
+    </div>
+    <div class="pills">
+      <span class="pill pill-live"><span class="dot"></span>LIVE</span>
+      <span class="pill pill-date" id="pillDate">—</span>
+      <span class="pill pill-priv">PERSONAL · PRIVATE</span>
+    </div>
+  </div>
+
+  <div class="note"><b>Read this as a monitor.</b> With few snapshots, this shows the current cross-section and (soon) week-on-week revisions. Rating <em>levels</em> are largely priced in; the tested edge lives in <em>revisions and drift</em>, and the validated finding is locked until ~8 weekly captures — see the Findings tab.</div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-pane="panel">Panel State</button>
+    <button class="tab" data-pane="revision">Revision Monitor <span class="lock" id="revLock">accruing</span></button>
+    <button class="tab" data-pane="accrual">Accrual &amp; Quality</button>
+    <button class="tab" data-pane="findings">Findings <span class="lock">locked</span></button>
+  </div>
+
+  <!-- PANEL STATE -->
+  <div class="pane active" id="pane-panel">
+    <div class="kpi-strip" id="kpis"></div>
+    <div class="grid">
+      <div class="card"><h3>Smart Score distribution</h3><div class="cap">Count of liquid names by TipRanks Smart Score (1 = bearish, 10 = bullish).</div><div id="cSS" class="chart"></div></div>
+      <div class="card"><h3>Analyst consensus mix</h3><div class="cap">How lopsided the ratings are — why the <em>level</em> alone rarely differentiates.</div><div id="cCons" class="chart"></div></div>
+    </div>
+    <div class="grid">
+      <div class="card"><h3>By sector — coverage &amp; mean Smart Score</h3><div class="cap">Bar = number of names; label = mean Smart Score.</div><div id="cSector" class="chart"></div></div>
+      <div class="card"><h3>Flow signals (share of names)</h3><div class="cap">Insider / hedge-fund / individual-investor stance, bucketed positive / neutral / negative.</div><div id="cSent" class="chart"></div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <h3>Liquid universe — the panel</h3>
+      <div class="tbl-tools">
+        <input id="filter" placeholder="Filter ticker / company / sector…">
+        <span class="hint" id="tblHint">—</span>
+        <span class="hint">· click a header to sort · high implied upside on a low Smart Score is usually a value trap, not a buy</span>
+      </div>
+      <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- REVISION MONITOR -->
+  <div class="pane" id="pane-revision">
+    <div class="staged">
+      <div class="big">The revision monitor lights up at snapshot 2</div>
+      <p>This is the useful part: week-on-week <b>upgrades / downgrades</b>, best-analyst <b>target raises &amp; cuts</b>, Smart-Score deltas, and sentiment flips over the liquid universe — the honest operationalisation of the revision edge.</p>
+      <p id="revNext">Next capture will populate it.</p>
+    </div>
+  </div>
+
+  <!-- ACCRUAL -->
+  <div class="pane" id="pane-accrual">
+    <div class="staged">
+      <div class="big" id="accHead">—</div>
+      <p>The study accrues forward: each weekly snapshot is frozen at capture (zero signal-side look-ahead). The pre-registered analysis needs enough captures with a matured forward window.</p>
+      <div class="progress"><div class="ptrack"><div class="pfill" id="accFill" style="width:0%"></div></div><div class="pcap" id="accCap">—</div></div>
+      <div class="acc-list" id="accList"></div>
+    </div>
+  </div>
+
+  <!-- FINDINGS -->
+  <div class="pane" id="pane-findings">
+    <div class="staged">
+      <div class="big">Findings — pre-registered, locked until accrual</div>
+      <p>The validated read — <b>drift-adjusted alpha</b> by signal, net of costs, on the liquid universe — implements only once the panel has enough matured snapshots. This is the tab that becomes the plain-language summary.</p>
+      <div class="progress"><div class="ptrack"><div class="pfill" id="findFill" style="width:0%"></div></div><div class="pcap" id="findCap">—</div></div>
+      <div class="method">
+        <b>Pre-registered method (frozen)</b>
+        <ul>
+          <li>• <b>Signals:</b> consensus rating <em>change</em> [primary], best-analyst target revision, Smart-Score decile.</li>
+          <li>• <b>Return:</b> total return over {1w, 1m, 3m}, delisting-aware.</li>
+          <li>• <b>Headline:</b> drift-adjusted alpha (beta + drift removed) — never raw return; block-bootstrap CI + random-entry null.</li>
+          <li>• <b>Controls:</b> size, sector, dividend yield. <b>Costs:</b> tiered, on every rebalance.</li>
+          <li>• <b>Kept only if</b> drift-adjusted alpha &gt; 0 net of costs with a CI excluding zero on the 1-month horizon. See <code>RESEARCH_MEMO.md</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot" id="foot">—</div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (x,d=1)=> x==null?'—':(typeof x==='number'?x.toFixed(d):x);
+const pct = x => x==null?'—':(x>=0?'+':'')+x.toFixed(1)+'%';
+
+// data path: fetch fallback lets the source template run standalone via `npx serve .`
+const DATA = 'data/dashboard/dashboard_data.json';
+let D = null;
+
+const CAT = () => ({
+  paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+  font:{family:'DM Sans', size:11, color:tok('--t2')},
+  margin:{t:8,b:34,l:40,r:10},
+  xaxis:{linecolor:tok('--bd2'), showgrid:false, tickfont:{size:10}, fixedrange:true},
+  yaxis:{gridcolor:tok('--bg-hover'), zeroline:false, tickfont:{size:10, family:'JetBrains Mono'}, fixedrange:true},
+  showlegend:false, bargap:0.28,
+  hoverlabel:{bgcolor:'#fff', bordercolor:tok('--bd2'), font:{size:11, family:'DM Sans'}}
+});
+const CFG = {displayModeBar:false, responsive:true};
+
+// red -> amber -> green across Smart Score 1..10
+function ssColor(v){
+  const t=Math.max(0,Math.min(1,(v-1)/9));
+  const stops=[[192,57,43],[180,83,9],[26,135,84]];
+  const seg=t<0.5?0:1, lt=t<0.5?t/0.5:(t-0.5)/0.5;
+  const a=stops[seg], b=stops[seg+1];
+  return `rgb(${Math.round(a[0]+(b[0]-a[0])*lt)},${Math.round(a[1]+(b[1]-a[1])*lt)},${Math.round(a[2]+(b[2]-a[2])*lt)})`;
+}
+const bucket = k => /positive|bullish/i.test(k)?'pos':(/negative|bearish/i.test(k)?'neg':'neu');
+
+function kpis(){
+  const u=D.universe, k=D.kpis;
+  const rows=[
+    ['Liquid universe', k.n_liquid, `${u.sp500} S&P 500 · ${u.sp400} MidCap 400`],
+    ['Median Smart Score', fmt(k.median_smart_score,1), 'of 10'],
+    ['Buy-rated', k.pct_buy+'%', 'Strong + Moderate Buy'],
+    ['Median upside', pct(k.median_upside), 'all-analyst target'],
+    ['Best-analyst upside', pct(k.median_best_upside), 'top-analyst target'],
+    ['Matched', u.matched+' / '+u.snapshot_total, 'of the export']
+  ];
+  $('#kpis').innerHTML = rows.map(r=>`<div class="kpi"><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
+}
+
+function chartSS(){
+  const h=D.smart_score_hist, x=Object.keys(h), y=x.map(k=>h[k]);
+  Plotly.newPlot('cSS',[{type:'bar',x,y,marker:{color:x.map(v=>ssColor(+v))},
+    hovertemplate:'Smart Score %{x}: %{y} names<extra></extra>'}],
+    Object.assign(CAT(),{xaxis:{title:{text:'',standoff:0},tickmode:'linear',fixedrange:true,linecolor:tok('--bd2'),showgrid:false}}),CFG);
+}
+function chartCons(){
+  const c=D.consensus, labels=Object.keys(c).reverse(), vals=labels.map(k=>c[k]);
+  const col={'Strong Buy':tok('--g'),'Moderate Buy':tok('--g2'),'Hold':tok('--t3'),'Moderate Sell':tok('--r2'),'Strong Sell':tok('--r')};
+  Plotly.newPlot('cCons',[{type:'bar',orientation:'h',y:labels,x:vals,marker:{color:labels.map(k=>col[k])},
+    text:vals.map(v=>v||''),textposition:'auto',textfont:{family:'JetBrains Mono',size:11},
+    hovertemplate:'%{y}: %{x} names<extra></extra>'}],
+    Object.assign(CAT(),{margin:{t:8,b:24,l:94,r:12},yaxis:{fixedrange:true,tickfont:{size:11,family:'DM Sans'}},xaxis:{showgrid:false,fixedrange:true,linecolor:tok('--bd2')}}),CFG);
+}
+function chartSector(){
+  const s=D.by_sector;
+  Plotly.newPlot('cSector',[{type:'bar',x:s.map(d=>d.sector),y:s.map(d=>d.n),
+    marker:{color:s.map(d=>ssColor(d.mean_ss||5))},
+    text:s.map(d=>d.mean_ss?d.mean_ss.toFixed(1):''),textposition:'outside',textfont:{family:'JetBrains Mono',size:10,color:tok('--t2')},
+    hovertemplate:'%{x}<br>%{y} names · mean SS %{text}<extra></extra>'}],
+    Object.assign(CAT(),{margin:{t:16,b:80,l:36,r:8},xaxis:{tickangle:-40,tickfont:{size:9.5},fixedrange:true,linecolor:tok('--bd2'),showgrid:false}}),CFG);
+}
+function chartSent(){
+  const srcs=[['insider','Insider'],['hedgefund','Hedge Fund'],['investor','Investor']];
+  const acc=srcs.map(([key])=>{const t={pos:0,neu:0,neg:0};const raw=D.sentiment[key]||{};let tot=0;
+    for(const k in raw){t[bucket(k)]+=raw[k];tot+=raw[k];} return {t,tot:tot||1};});
+  const mk=(b,color,name)=>({type:'bar',name,x:srcs.map(s=>s[1]),
+    y:acc.map(a=>+(100*a.t[b]/a.tot).toFixed(1)),marker:{color},
+    hovertemplate:'%{x} · '+name+': %{y}%<extra></extra>'});
+  Plotly.newPlot('cSent',[mk('pos',tok('--g'),'Positive'),mk('neu',tok('--t4'),'Neutral'),mk('neg',tok('--r'),'Negative')],
+    Object.assign(CAT(),{barmode:'stack',showlegend:true,legend:{orientation:'h',y:1.12,x:0,font:{size:10}},
+      yaxis:{ticksuffix:'%',fixedrange:true,tickfont:{size:10,family:'JetBrains Mono'},gridcolor:tok('--bg-hover')}}),CFG);
+}
+
+const COLS=[
+  ['ticker','Ticker','l'],['company','Company','l'],['sector','Sector','l'],['idx','Idx','r'],
+  ['smart_score','SS','r'],['consensus','Consensus','l'],['best_consensus','Best','l'],
+  ['upside','Upside','r'],['best_upside','Best↑','r'],['insider','Insider','r'],
+  ['div_yield','Yld%','r'],['mktcap_b','Cap$B','r']
+];
+let sortKey='smart_score', sortDir=-1;
+function chipCls(v){return v==='Strong Buy'?'chip-sb':v==='Moderate Buy'?'chip-mb':v==='Hold'?'chip-h':v?'chip-s':''}
+function renderTable(){
+  const th=COLS.map(c=>`<th class="${c[2]==='l'?'l':''}" data-k="${c[0]}">${c[1]}${sortKey===c[0]?(sortDir<0?' ▾':' ▴'):''}</th>`).join('');
+  $('#tbl thead').innerHTML='<tr>'+th+'</tr>';
+  const q=($('#filter').value||'').toLowerCase();
+  let rows=D.table.filter(r=>!q||(r.ticker+' '+(r.company||'')+' '+(r.sector||'')).toLowerCase().includes(q));
+  rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];if(x==null)return 1;if(y==null)return -1;
+    return (typeof x==='number'?x-y:(''+x).localeCompare(''+y))*sortDir;});
+  $('#tblHint').textContent=`${rows.length} names`;
+  $('#tbl tbody').innerHTML=rows.slice(0,600).map(r=>{
+    const ssc=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
+    const up=v=>v==null?'—':`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;
+    return `<tr><td class="l tk">${r.ticker}</td><td class="l co">${r.company||''}</td><td class="l co">${r.sector||''}</td>
+      <td>${r.idx}</td><td>${ssc}</td><td class="l"><span class="chip ${chipCls(r.consensus)}">${r.consensus||'—'}</span></td>
+      <td class="l"><span class="chip ${chipCls(r.best_consensus)}">${r.best_consensus||'—'}</span></td>
+      <td>${up(r.upside)}</td><td>${up(r.best_upside)}</td>
+      <td class="${r.insider==='Positive'?'pos':r.insider==='Negative'?'neg':'neu'}">${r.insider||'—'}</td>
+      <td>${fmt(r.div_yield,2)}</td><td>${fmt(r.mktcap_b,1)}</td></tr>`;}).join('')
+    + (rows.length>600?`<tr><td colspan="12" class="l co" style="text-align:center">… ${rows.length-600} more — filter to narrow</td></tr>`:'');
+}
+
+function accrual(){
+  const a=D.accrual;
+  $('#accHead').textContent=`${a.snapshots} of ${a.min_snapshots} weekly captures`;
+  const p=Math.min(100,100*a.snapshots/a.min_snapshots);
+  $('#accFill').style.width=p+'%'; $('#findFill').style.width=p+'%';
+  const cap=`${a.snapshots}/${a.min_snapshots} captures · ${a.matured} with a matured ~1m window`;
+  $('#accCap').textContent=cap; $('#findCap').textContent=cap;
+  $('#accList').innerHTML=a.dates.map(d=>`• ${d}`).join('<br>')||'—';
+  if(a.snapshots>=2){$('#revLock').textContent='live';}
+  $('#revNext').textContent = a.snapshots>=2 ? 'Ready — build the revision view.' :
+     'Next capture will populate it (weekly reminder set for Thursdays).';
+}
+
+function boot(){
+  $('#pillDate').textContent='as of '+D.as_of;
+  $('#foot').textContent=`Generated ${D.generated_utc} · liquid universe ${D.universe.indices.join(' + ')} · PRIVATE / personal-use — TipRanks & Norgate values stay local, never published.`;
+  kpis(); chartSS(); chartCons(); chartSector(); chartSent(); renderTable(); accrual();
+}
+
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active'); $('#pane-'+t.dataset.pane).classList.add('active');
+  window.dispatchEvent(new Event('resize'));
+}));
+$('#filter').addEventListener('input',renderTable);
+document.addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(!th)return;
+  const k=th.dataset.k; if(k===sortKey)sortDir*=-1;else{sortKey=k;sortDir=(k==='ticker'||k==='company'||k==='sector')?1:-1;}renderTable();});
+
+fetch(DATA).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(d=>{D=d;boot();})
+  .catch(e=>{$('#kpis').innerHTML=`<div class="kpi" style="grid-column:1/-1"><div class="kpi-lab">No data</div><div class="kpi-sub">Run <span class="mono">python scripts/build_dashboard.py</span> then serve locally (<span class="mono">npx serve .</span>). (${e})</div></div>`;});
+</script>
+</body>
+</html>
