@@ -457,9 +457,17 @@ function openChart(t){
   $('#chartOvl').classList.add('open');
   Plotly.purge('cPrice');
   if(!r.chart){$('#chMeta').textContent='No chart built for this name — price files are pre-built for lens-passed names only (re-run build_dashboard.py after a capture to refresh).';return;}
+  if(window.__EXPORT_PRICES__){
+    const h=window.__EXPORT_PRICES__[t.replace('/','-')];
+    if(h)renderPrice(r,h); else $('#chMeta').textContent='Chart not included in this export (price series are pre-built for lens-passed names only).';
+    return;
+  }
   fetch('data/dashboard/prices/'+encodeURIComponent(t.replace('/','-'))+'.json')
     .then(x=>{if(!x.ok)throw new Error(x.status);return x.json();})
-    .then(h=>{
+    .then(h=>renderPrice(r,h))
+    .catch(e=>{$('#chMeta').textContent='Chart data missing ('+e+') — re-run build_dashboard.py.';});
+}
+function renderPrice(r,h){
       const last=h.close[h.close.length-1];
       $('#chMeta').textContent=[
         `Score ${r.smart_score!=null?r.smart_score:'—'}`, r.consensus||'—',
@@ -491,8 +499,6 @@ function openChart(t){
         hovermode:'x unified',hoverlabel:{bgcolor:'#fff',bordercolor:'#d5d3ca',font:{size:10,family:'DM Sans',color:'#1a1a18'}},
         shapes:shp,annotations:ann};
       Plotly.newPlot('cPrice',trc,L,CFG);
-    })
-    .catch(e=>{$('#chMeta').textContent='Chart data missing ('+e+') — re-run build_dashboard.py.';});
 }
 
 const COLS=[
@@ -622,7 +628,14 @@ document.addEventListener('click',e=>{const row=e.target.closest('#tbl tbody tr[
 document.addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(!th)return;
   const k=th.dataset.k; if(k===sortKey)sortDir*=-1;else{sortKey=k;sortDir=(k==='ticker'||k==='company'||k==='sector')?1:-1;}renderTable();});
 
-fetch(DATA).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
+function exportBadge(){
+  const lp=document.querySelector('.pill-live'); if(lp)lp.outerHTML='<span class="pill pill-priv">STATIC EXPORT</span>';
+  const b=document.createElement('div'); b.className='note';
+  b.innerHTML='<b>Private snapshot for discussion.</b> This file contains licensed per-name data (TipRanks Ultimate · Norgate, personal-use licences). Please do not forward, host, or publish it; the shareable public layer is the aggregate findings once verdicts exist.';
+  document.querySelector('.masthead').after(b);
+}
+if(window.__EXPORT_DATA__){ D=window.__EXPORT_DATA__; exportBadge(); boot(); }
+else fetch(DATA).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
   .then(d=>{D=d;boot();})
   .catch(e=>{$('#kpis').innerHTML=`<div class="kpi" style="grid-column:1/-1"><div class="kpi-lab">No data</div><div class="kpi-sub">Run <span class="mono">python scripts/build_dashboard.py</span> then serve locally (<span class="mono">npx serve .</span>). (${e})</div></div>`;});
 </script>
