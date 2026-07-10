@@ -130,6 +130,46 @@ def main() -> int:
             row["sector_pct"] = round(100.0 * sum(1 for x in vs if x < v) / (len(vs) - 1))
     n_lens = sum(1 for row in table if row["lens_pass"])
 
+    # --- per-name price history for the chart panel (lens-passed names) -------
+    # Display layer only: ~1y TOTALRETURN + 50/200-session averages per lens-
+    # passed name, one small JSON each, fetched by the template on row click.
+    # Skipped gracefully when NDU is down; the weekly flow runs post-merge with
+    # NDU already up.
+    sym_by_ticker = {r["ticker"]: r.get("norgate_symbol") for r in liquid}
+    rec_by_ticker = {r["ticker"]: r for r in liquid}
+    price_dir = OUT_DIR / "prices"
+    n_charts = 0
+    try:
+        import norgate as ng
+        ndu = ng.connect()
+        price_dir.mkdir(parents=True, exist_ok=True)
+        for old in price_dir.glob("*.json"):
+            old.unlink()
+        asof_date = dt.date.fromisoformat(merge["as_of"])
+        for row in table:
+            if not row["lens_pass"]:
+                continue
+            sym = sym_by_ticker.get(row["ticker"])
+            if not sym:
+                continue
+            hist = ng.chart_history(ndu, sym, asof_date)
+            if hist is None:
+                continue
+            rec = rec_by_ticker[row["ticker"]]
+            hist.update({"ticker": row["ticker"], "company": row.get("company"),
+                         "as_of": merge["as_of"],
+                         "best_target": rec.get("best_analyst_price_target"),
+                         "cons_target": rec.get("analyst_price_target")})
+            safe = row["ticker"].replace("/", "-")
+            (price_dir / f"{safe}.json").write_text(
+                json.dumps(hist, separators=(",", ":")), encoding="utf-8")
+            row["chart"] = True
+            n_charts += 1
+    except Exception as exc:  # noqa: BLE001 -- chart build is optional display
+        print(f"[dashboard] price charts skipped ({exc})", file=sys.stderr)
+    for row in table:
+        row.setdefault("chart", False)
+
     snaps = sorted(SNAP_DIR.glob("snapshot_*.json")) if SNAP_DIR.exists() else []
     snap_dates = sorted(p.stem.replace("snapshot_", "") for p in snaps)
     today = dt.date.today()
@@ -174,8 +214,8 @@ def main() -> int:
     out.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     print(f"[dashboard] as_of {payload['as_of']}: {len(liquid)} liquid names, "
           f"{len(by_sector)} sectors, lens-pass {n_lens} (median 3m TR "
-          f"{med_tr3m if med_tr3m is not None else 'n/a'}%) -> {out.relative_to(ROOT)} "
-          f"({out.stat().st_size // 1024} KB)")
+          f"{med_tr3m if med_tr3m is not None else 'n/a'}%), {n_charts} price charts "
+          f"-> {out.relative_to(ROOT)} ({out.stat().st_size // 1024} KB)")
     print(f"[dashboard] live: Panel State + Accrual | Revision="
           f"{'ON' if revision_available else 'accruing'} | Findings locked "
           f"({len(snap_dates)}/{MIN_SNAPSHOTS})")

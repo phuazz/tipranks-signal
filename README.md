@@ -43,7 +43,7 @@ python scripts/build_dashboard.py     # writes data/dashboard/dashboard_data.jso
 npx serve .                           # open http://localhost:PORT/template.html
 ```
 
-Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sector, flow signals, the liquid-universe table with the view-only lens: trap-profile filter + sector-relative Best↑/σ ranking, ungraded) and **Accrual** are live now; **Revision Monitor** lights up at snapshot 2 (week-on-week upgrades / target raises / score deltas — the useful part; sector revision breadth staged there too); **Findings** (the drift-adjusted-alpha read) stays locked until ~8 captures; **Literature** is static reference — the research map behind the frozen design and the panel lens.
+Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sector, flow signals, the **Sector Leaders** board (vol-scaled best-analyst upside per sector, top three labelled), and the liquid-universe table with the view-only lens: trap-profile filter + sector-relative Best↑/σ ranking, ungraded; click any row or leader dot for a PCC-style price chart with 50d/200d averages and analyst-target lines, built per lens-passed name into `data/dashboard/prices/`) and **Accrual** are live now; **Revision Monitor** lights up at snapshot 2 (week-on-week upgrades / target raises / score deltas — the useful part; sector revision breadth staged there too); **Findings** (the drift-adjusted-alpha read) stays locked until ~8 captures; **Literature** is static reference — the research map behind the frozen design and the panel lens.
 
 ## Open issues
 

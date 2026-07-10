@@ -254,6 +254,28 @@ def liquidity_asof(n, sym: str, asof: dt.date, window: int = 21,
             "tr_3m_pct": tr_3m_pct, "vol_ann_pct": vol_ann_pct}
 
 
+def chart_history(n, sym: str, asof: dt.date, bars: int = 262) -> dict | None:
+    """Roughly one year of TOTALRETURN closes ending at the last session on or
+    before `asof`, plus 50- and 200-session moving averages computed on the FULL
+    history before truncation (so early rows are correct). Display layer for the
+    private dashboard's price chart -- not an analysis input."""
+    ts = pd.Timestamp(asof)
+    tr = _price(n, sym, "TOTALRETURN").loc[:ts]
+    if len(tr) == 0:
+        return None
+    closes = tr["Close"].astype(float).dropna()
+    ma50 = closes.rolling(50).mean()
+    ma200 = closes.rolling(200).mean()
+    tail = closes.tail(bars)
+
+    def _rnd(series):
+        return [None if pd.isna(v) else round(float(v), 2) for v in series]
+
+    return {"dates": [d.date().isoformat() for d in tail.index],
+            "close": _rnd(tail), "ma50": _rnd(ma50.loc[tail.index]),
+            "ma200": _rnd(ma200.loc[tail.index])}
+
+
 def resolve_symbol(n, ticker: str) -> str | None:
     """Best-effort TipRanks ticker -> live Norgate symbol (must have price bars).
     Tries the raw ticker and common class-share spellings; returns None on a miss
