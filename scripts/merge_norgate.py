@@ -56,7 +56,8 @@ def merge(asof: dt.date, price_floor=PRICE_FLOOR_USD, adv_floor=ADV_FLOOR_USD) -
         if sym is None:
             row.update({"norgate_symbol": None, "matched": False, "member_of": [],
                         "in_universe": False, "close_tr": None, "adv_usd": None,
-                        "liquid": False, "anchor_date": None})
+                        "liquid": False, "anchor_date": None,
+                        "tr_3m_pct": None, "vol_ann_pct": None})
             out_records.append(row)
             continue
         n_matched += 1
@@ -73,7 +74,8 @@ def merge(asof: dt.date, price_floor=PRICE_FLOOR_USD, adv_floor=ADV_FLOOR_USD) -
         row.update({"norgate_symbol": sym, "matched": True, "member_of": members,
                     "in_universe": in_universe, "close_tr": liq["close_tr"],
                     "adv_usd": liq["adv_usd"], "liquid": liquid,
-                    "anchor_date": liq["anchor_date"]})
+                    "anchor_date": liq["anchor_date"],
+                    "tr_3m_pct": liq.get("tr_3m_pct"), "vol_ann_pct": liq.get("vol_ann_pct")})
         out_records.append(row)
 
     payload = {

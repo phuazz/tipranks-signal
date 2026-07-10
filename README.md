@@ -43,7 +43,7 @@ python scripts/build_dashboard.py     # writes data/dashboard/dashboard_data.jso
 npx serve .                           # open http://localhost:PORT/template.html
 ```
 
-Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sector, flow signals, the liquid-universe table) and **Accrual** are live now; **Revision Monitor** lights up at snapshot 2 (week-on-week upgrades / target raises / score deltas — the useful part); **Findings** (the drift-adjusted-alpha read) stays locked until ~8 captures.
+Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sector, flow signals, the liquid-universe table with the view-only lens: trap-profile filter + sector-relative Best↑/σ ranking, ungraded) and **Accrual** are live now; **Revision Monitor** lights up at snapshot 2 (week-on-week upgrades / target raises / score deltas — the useful part; sector revision breadth staged there too); **Findings** (the drift-adjusted-alpha read) stays locked until ~8 captures; **Literature** is static reference — the research map behind the frozen design and the panel lens.
 
 ## Open issues
 

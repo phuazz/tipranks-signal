@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tipranks-monitor",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", ".", "-l", "5178"],
+      "port": 5178
+    }
+  ]
+}

@@ -218,14 +218,20 @@ def member_asof(n, sym: str, asof: dt.date, indices=TARGET_INDICES) -> list[str]
     return hits
 
 
-def liquidity_asof(n, sym: str, asof: dt.date, window: int = 21) -> dict:
-    """As-of TOTALRETURN close (return anchor) and trailing median dollar volume
-    (CAPITAL close x volume -- split-consistent tradeability gate)."""
+def liquidity_asof(n, sym: str, asof: dt.date, window: int = 21,
+                   trend_window: int = 63) -> dict:
+    """As-of TOTALRETURN close (return anchor), trailing median dollar volume
+    (CAPITAL close x volume -- split-consistent tradeability gate), plus two
+    stats from the SAME series (no extra fetch): the trailing 63-session
+    (~3-month) total return -- the frozen S3 price-gate input -- and annualised
+    daily TOTALRETURN volatility over that window (display normalisation for
+    upside-per-sigma; not a graded signal)."""
     ts = pd.Timestamp(asof)
     tr = _price(n, sym, "TOTALRETURN").loc[:ts]
     cap = _price(n, sym, "CAPITAL").loc[:ts]
     if len(tr) == 0:
-        return {"matched": False, "close_tr": None, "adv_usd": None, "anchor_date": None}
+        return {"matched": False, "close_tr": None, "adv_usd": None, "anchor_date": None,
+                "tr_3m_pct": None, "vol_ann_pct": None}
     anchor_date = tr.index[-1].date()
     close_tr = float(tr["Close"].iloc[-1])
     adv_usd = None
@@ -233,8 +239,19 @@ def liquidity_asof(n, sym: str, asof: dt.date, window: int = 21) -> dict:
         dv = (cap["Close"].astype(float) * cap["Volume"].astype(float)).dropna()
         if len(dv):
             adv_usd = float(dv.tail(window).median())
+    closes = tr["Close"].astype(float).dropna()
+    tr_3m_pct = None
+    if len(closes) > trend_window:
+        base = float(closes.iloc[-(trend_window + 1)])
+        if base > 0:
+            tr_3m_pct = float((float(closes.iloc[-1]) / base - 1.0) * 100.0)
+    vol_ann_pct = None
+    rets = closes.pct_change().dropna().tail(trend_window)
+    if len(rets) >= 40:   # require most of the ~3-month window, else stay honest with None
+        vol_ann_pct = float(rets.std(ddof=1) * (252.0 ** 0.5) * 100.0)
     return {"matched": True, "close_tr": close_tr, "adv_usd": adv_usd,
-            "anchor_date": anchor_date.isoformat()}
+            "anchor_date": anchor_date.isoformat(),
+            "tr_3m_pct": tr_3m_pct, "vol_ann_pct": vol_ann_pct}
 
 
 def resolve_symbol(n, ticker: str) -> str | None:

@@ -80,17 +80,55 @@ def main() -> int:
                  "hedgefund": tally("hedgefund_signal"),
                  "investor": tally("investor_sentiment")}
 
+    def _bvc_gap(r):
+        """Best-analyst vs consensus target gap, % -- crude dispersion proxy
+        (consensus targets lose informativeness when disagreement is high)."""
+        bt, at = r.get("best_analyst_price_target"), r.get("analyst_price_target")
+        if bt is None or at is None or at <= 0:
+            return None
+        return round((bt / at - 1.0) * 100.0, 1)
+
     table = [{
         "ticker": r["ticker"], "company": r.get("company"), "sector": r.get("sector"),
         "smart_score": r.get("smart_score"), "consensus": r.get("analyst_consensus"),
         "best_consensus": r.get("best_analyst_consensus"),
         "upside": r.get("analyst_price_target_upside_pct"),
         "best_upside": r.get("best_analyst_upside_pct"),
+        "tr_3m": round(r["tr_3m_pct"], 1) if r.get("tr_3m_pct") is not None else None,
+        "vol_ann": round(r["vol_ann_pct"], 1) if r.get("vol_ann_pct") is not None else None,
+        "bvc_gap": _bvc_gap(r),
         "insider": r.get("insider_signal"), "hedgefund": r.get("hedgefund_signal"),
         "div_yield": r.get("dividend_yield"),
         "mktcap_b": round((r.get("market_cap") or 0) / 1e9, 1),
         "idx": "500" if "S&P 500" in r.get("member_of", []) else "400",
     } for r in liquid]
+
+    # --- view-layer lens (ungraded; mirrors the frozen S3 gate inputs) ---------
+    # Trap profile = 3m TR below the liquid-universe cross-sectional median, OR
+    # negative insider signal, OR Smart Score <= 4. Upside-per-sigma and the
+    # sector-relative percentile are DISPLAY normalisations (Da & Schaumburg:
+    # implied upside ranks within sector, not across the market). Nothing here
+    # is graded -- the graded read is analyse.py against the frozen menu.
+    med_tr3m = _median([row["tr_3m"] for row in table])
+    for row in table:
+        u, v = row["best_upside"], row["vol_ann"]
+        row["upside_per_vol"] = round(u / v, 2) if (u is not None and v and v > 0) else None
+        gate_price = (row["tr_3m"] is not None and med_tr3m is not None
+                      and row["tr_3m"] >= med_tr3m)
+        gate_insider = (row["insider"] or "") != "Negative"
+        gate_ss = row["smart_score"] is None or row["smart_score"] > 4
+        row["lens_pass"] = bool(gate_price and gate_insider and gate_ss)
+    sec_vals: dict = {}
+    for row in table:
+        if row["upside_per_vol"] is not None:
+            sec_vals.setdefault(row["sector"] or "—", []).append(row["upside_per_vol"])
+    for row in table:
+        v, vs = row["upside_per_vol"], sec_vals.get(row["sector"] or "—", [])
+        if v is None or len(vs) < 2:
+            row["sector_pct"] = None
+        else:
+            row["sector_pct"] = round(100.0 * sum(1 for x in vs if x < v) / (len(vs) - 1))
+    n_lens = sum(1 for row in table if row["lens_pass"])
 
     snaps = sorted(SNAP_DIR.glob("snapshot_*.json")) if SNAP_DIR.exists() else []
     snap_dates = sorted(p.stem.replace("snapshot_", "") for p in snaps)
@@ -120,6 +158,9 @@ def main() -> int:
         "consensus": {k: cons.get(k, 0) for k in CONSENSUS_ORDER},
         "by_sector": by_sector,
         "sentiment": sentiment,
+        "lens": {"median_tr_3m": med_tr3m, "n_pass": n_lens,
+                 "definition": ("view-only, ungraded: hide 3m TR < universe median, "
+                                "negative insider, or Smart Score <= 4")},
         "table": table,
         "accrual": {"snapshots": len(snap_dates), "dates": snap_dates,
                     "matured": matured, "min_snapshots": MIN_SNAPSHOTS, "mature_days": MATURE_DAYS},
@@ -132,7 +173,9 @@ def main() -> int:
     out = OUT_DIR / "dashboard_data.json"
     out.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     print(f"[dashboard] as_of {payload['as_of']}: {len(liquid)} liquid names, "
-          f"{len(by_sector)} sectors -> {out.relative_to(ROOT)} ({out.stat().st_size // 1024} KB)")
+          f"{len(by_sector)} sectors, lens-pass {n_lens} (median 3m TR "
+          f"{med_tr3m if med_tr3m is not None else 'n/a'}%) -> {out.relative_to(ROOT)} "
+          f"({out.stat().st_size // 1024} KB)")
     print(f"[dashboard] live: Panel State + Accrual | Revision="
           f"{'ON' if revision_available else 'accruing'} | Findings locked "
           f"({len(snap_dates)}/{MIN_SNAPSHOTS})")

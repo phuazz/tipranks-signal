@@ -98,6 +98,16 @@ tbody tr:hover{background:var(--bg-hover)}
 .method b{color:var(--t1)} .method code{font-family:var(--mono);font-size:11.5px;background:var(--bg2);padding:1px 5px;border-radius:4px}
 .method li{margin:4px 0 4px 4px;list-style:none}
 .acc-list{font-family:var(--mono);font-size:12.5px;color:var(--t2);margin-top:12px;text-align:left;max-width:420px;margin-left:auto;margin-right:auto}
+
+/* literature */
+.lit-card{margin-bottom:16px}
+.lit-card ul{list-style:none}
+.lit-card li{padding:9px 0;border-bottom:1px solid var(--bg4);font-size:12.5px;color:var(--t2);line-height:1.55}
+.lit-card li:last-child{border-bottom:none;padding-bottom:2px}
+.lit-card .src{color:var(--t1);font-weight:600}
+.lit-card a{color:var(--b);text-decoration:none}
+.lit-card a:hover{text-decoration:underline}
+.hook{display:inline-block;font-size:10px;font-weight:700;letter-spacing:0.3px;padding:1px 7px;border-radius:999px;background:var(--b-bg);color:var(--b);margin-left:6px;white-space:nowrap}
 .foot{margin-top:26px;font-size:11px;color:var(--t4);border-top:1px solid var(--bd);padding-top:12px}
 @media(max-width:768px){.shell{padding:16px}.grid{grid-template-columns:1fr}.kpi-strip{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -123,6 +133,7 @@ tbody tr:hover{background:var(--bg-hover)}
     <button class="tab" data-pane="revision">Revision Monitor <span class="lock" id="revLock">accruing</span></button>
     <button class="tab" data-pane="accrual">Accrual &amp; Quality</button>
     <button class="tab" data-pane="findings">Findings <span class="lock">locked</span></button>
+    <button class="tab" data-pane="lit">Literature</button>
   </div>
 
   <!-- PANEL STATE -->
@@ -140,8 +151,9 @@ tbody tr:hover{background:var(--bg-hover)}
       <h3>Liquid universe — the panel</h3>
       <div class="tbl-tools">
         <input id="filter" placeholder="Filter ticker / company / sector…">
+        <label class="hint" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="lens" checked> lens: hide trap profile</label>
         <span class="hint" id="tblHint">—</span>
-        <span class="hint">· click a header to sort · high implied upside on a low Smart Score is usually a value trap, not a buy</span>
+        <span class="hint">· default sort = sector-relative Best↑/σ percentile · the lens (3m TR below universe median / negative insider / SS ≤ 4) is view-only and ungraded — see the Literature tab</span>
       </div>
       <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
     </div>
@@ -153,6 +165,10 @@ tbody tr:hover{background:var(--bg-hover)}
       <div class="big">The revision monitor lights up at snapshot 2</div>
       <p>This is the useful part: week-on-week <b>upgrades / downgrades</b>, best-analyst <b>target raises &amp; cuts</b>, Smart-Score deltas, and sentiment flips over the liquid universe — the honest operationalisation of the revision edge.</p>
       <p id="revNext">Next capture will populate it.</p>
+    </div>
+    <div class="staged" style="margin-top:16px">
+      <div class="big">Sector revision breadth — staged</div>
+      <p>The defensible sector-attractiveness read: share of names <b>upgraded minus downgraded</b>, and share with the <b>best-analyst target raised</b>, by sector. Sector mean Smart Score (Panel State) is a levels read and carries little; breadth of fresh revisions is the sector view worth watching. Lights up with snapshot 2.</p>
     </div>
   </div>
 
@@ -180,6 +196,60 @@ tbody tr:hover{background:var(--bg-hover)}
           <li>• <b>Headline:</b> drift-adjusted alpha (beta + drift removed) — never raw return; block-bootstrap CI + random-entry null.</li>
           <li>• <b>Controls:</b> size, sector, dividend yield. <b>Costs:</b> tiered, on every rebalance.</li>
           <li>• <b>Kept only if</b> drift-adjusted alpha &gt; 0 net of costs with a CI excluding zero on the 1-month horizon. See <code>RESEARCH_MEMO.md</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- LITERATURE -->
+  <div class="pane" id="pane-lit">
+    <div class="note" style="margin-top:0"><b>The research map behind the design.</b> What the analyst-signal literature actually supports, and how each finding is wired into the frozen framework. This tab informs design and display only — it grades nothing. The five registered schemes in <span class="mono">RESEARCH_MEMO.md</span> are the only graded objects; additions cost a dated register row.</div>
+    <div class="card lit-card">
+      <h3>How to read the panel — the lens order</h3>
+      <div class="cap">The view-layer organisation the evidence supports, applied in the Liquid Universe table. Ungraded by construction.</div>
+      <ul>
+        <li><b>1 · Gate the traps first.</b> Hide price-falling names (3-month TR below the universe median), negative insider signals, and Smart Score ≤ 4. High implied upside on that profile is usually a stale target on a deteriorating name, not a buy. <span class="hook">S3 gate logic</span></li>
+        <li><b>2 · Rank within sector, not across the market.</b> Implied upside carries information only relative to sector peers, so the default sort is the sector-relative percentile of best-analyst upside per unit of volatility (Best↑/σ). <span class="hook">view lens</span></li>
+        <li><b>3 · From snapshot 2, freshness takes over.</b> Week-on-week upgrades and best-analyst target raises become the primary sort; the levels-based lens above is only the best available interim ordering while one capture exists. <span class="hook">S1a · S1b</span></li>
+        <li><b>4 · Sectors: watch revision breadth, not level.</b> Net upgrades and target-raise share by sector (staged on the Revision Monitor). Sector mean Smart Score is a levels read and carries little. <span class="hook">diagnostic</span></li>
+      </ul>
+    </div>
+    <div class="grid">
+      <div class="card lit-card">
+        <h3>Revisions beat levels</h3>
+        <ul>
+          <li><span class="src">Womack (1996), <em>Journal of Finance</em>.</span> Recommendation <b>changes</b> are followed by drift, asymmetrically — downgrade drift is larger and longer-lived than upgrade drift. <span class="hook">S1a primary · short-side diagnostic</span></li>
+          <li><span class="src">Barber, Lehavy, McNichols &amp; Trueman (2001), <em>Journal of Finance</em>.</span> Consensus-<b>level</b> portfolios earn gross abnormal returns that transaction costs erase; turnover is the killer. <span class="hook">tiered costs, every rebalance</span></li>
+          <li><span class="src"><a href="https://arxiv.org/pdf/2411.13813" target="_blank" rel="noopener">Sell-side information study (2024, working paper)</a>.</span> Revision reports carry roughly six times the information of reiterations (out-of-sample R² ≈ 21–23% vs ≈ 3.6%); confirmatory rating-plus-target pairs reinforce, contradictory pairs cancel. <span class="hook">reiterations excluded</span></li>
+          <li><span class="src">Loh &amp; Stulz (2011), <em>Review of Financial Studies</em>.</span> Only ~12% of recommendation changes are influential, concentrated in reputable analysts acting away from consensus. <span class="hook">best-analyst weighting</span></li>
+        </ul>
+      </div>
+      <div class="card lit-card">
+        <h3>Price targets: biased level, usable relative signal</h3>
+        <ul>
+          <li><span class="src"><a href="https://webuser.bus.umich.edu/rlehavy/BL.pdf" target="_blank" rel="noopener">Brav &amp; Lehavy (2003), <em>Journal of Finance</em></a>.</span> Target-price <b>revisions</b> move prices — information events even conditional on the rating. <span class="hook">S1b</span></li>
+          <li><span class="src">Da &amp; Schaumburg (2011), <em>Journal of Financial Markets</em>.</span> Target-implied upside predicts <b>within sector</b>, not across the market; the sector-neutral construction earned ~2%/month over 1999–2004 — an in-sample-era upper bound. <span class="hook">sector-relative rank</span></li>
+          <li><span class="src"><a href="https://publications.aaahq.org/accounting-review/article-abstract/95/6/125/4230" target="_blank" rel="noopener">Dechow &amp; You (2020), <em>The Accounting Review</em></a>.</span> The largest component of implied returns is analyst error about risk; roughly 16–18 cents per dollar of implied upside is realised, and only on claimed undervaluation. <span class="hook">raw upside never a sort key</span></li>
+          <li><span class="src"><a href="https://www.sciencedirect.com/science/article/abs/pii/S1386418121000562" target="_blank" rel="noopener">“Betting against analyst target price” (2021), <em>Journal of Financial Markets</em></a>.</span> The highest-implied-return names underperform — the optimism tail inverts. <span class="hook">trap gate</span></li>
+          <li><span class="src"><a href="https://pubsonline.informs.org/doi/10.1287/mnsc.2021.03549" target="_blank" rel="noopener">Dispersion and consensus targets, <em>Management Science</em></a>.</span> Implied returns predict when analyst disagreement is low and invert when it is high. <span class="hook">B−C gap column</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card lit-card">
+        <h3>Corroboration axes</h3>
+        <ul>
+          <li><span class="src">Cohen, Malloy &amp; Pomorski (2012), <em>Journal of Finance</em>.</span> Opportunistic insider trades predict returns; routine ones do not. The insider axis is the most orthogonal own-money corroborator of an analyst signal. <span class="hook">S3 gate · S2 component</span></li>
+          <li><span class="src">House result — event-studies funnel (2026-07).</span> The deployability stress-test collapsed 14 discovered leads to 1 once drift-adjusted: the apparent edge was beta plus high-drift-name selection. The value-trap anti-pattern (big upside, weak price, low composite) is the single-name version of the same failure. <span class="hook">drift-adjusted headline · price gate</span></li>
+          <li><span class="src">Composite recursion guard.</span> The Smart Score embeds the analyst consensus, so gating a revision on Smart-Score-rising would partially confirm the signal with itself; the score is graded once, as-is (S1c), and its sub-axes serve attribution only. <span class="hook">S1c · no double-counting</span></li>
+        </ul>
+      </div>
+      <div class="card lit-card">
+        <h3>Discipline: why the menu is frozen</h3>
+        <ul>
+          <li><span class="src">McLean &amp; Pontiff (2016), <em>Journal of Finance</em>.</span> Published anomaly returns decay by roughly half post-publication — expectations for any analyst-signal edge should be modest and cost-fragile. <span class="hook">realistic prize</span></li>
+          <li><span class="src">Harvey, Liu &amp; Zhu (2016), <em>Review of Financial Studies</em>; Bailey &amp; López de Prado (2014).</span> Multiple testing inflates discovery; haircuts and the deflated Sharpe ratio are the correction. <span class="hook">N = 5 · BH-FDR q = 0.10 · DSR</span></li>
+          <li><span class="src">Pre-registration (this project).</span> Forward-only snapshots; five schemes frozen before the second capture; ratchet, clock-start and no-promotion bookkeeping; verdicts only from ≥ 26 captures. <span class="hook">register 3–5</span></li>
         </ul>
       </div>
     </div>
@@ -269,19 +339,24 @@ function chartSent(){
 const COLS=[
   ['ticker','Ticker','l'],['company','Company','l'],['sector','Sector','l'],['idx','Idx','r'],
   ['smart_score','SS','r'],['consensus','Consensus','l'],['best_consensus','Best','l'],
-  ['upside','Upside','r'],['best_upside','Best↑','r'],['insider','Insider','r'],
-  ['div_yield','Yld%','r'],['mktcap_b','Cap$B','r']
+  ['upside','Upside','r'],['best_upside','Best↑','r'],
+  ['tr_3m','3M TR','r'],['vol_ann','σ ann','r'],['upside_per_vol','Best↑/σ','r'],
+  ['sector_pct','Sec pct','r'],['bvc_gap','B−C','r'],
+  ['insider','Insider','r'],['div_yield','Yld%','r'],['mktcap_b','Cap$B','r']
 ];
-let sortKey='smart_score', sortDir=-1;
+let sortKey='sector_pct', sortDir=-1;
 function chipCls(v){return v==='Strong Buy'?'chip-sb':v==='Moderate Buy'?'chip-mb':v==='Hold'?'chip-h':v?'chip-s':''}
 function renderTable(){
   const th=COLS.map(c=>`<th class="${c[2]==='l'?'l':''}" data-k="${c[0]}">${c[1]}${sortKey===c[0]?(sortDir<0?' ▾':' ▴'):''}</th>`).join('');
   $('#tbl thead').innerHTML='<tr>'+th+'</tr>';
   const q=($('#filter').value||'').toLowerCase();
+  const lensOn=$('#lens').checked;
   let rows=D.table.filter(r=>!q||(r.ticker+' '+(r.company||'')+' '+(r.sector||'')).toLowerCase().includes(q));
+  const preLens=rows.length;
+  if(lensOn) rows=rows.filter(r=>r.lens_pass);
   rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];if(x==null)return 1;if(y==null)return -1;
     return (typeof x==='number'?x-y:(''+x).localeCompare(''+y))*sortDir;});
-  $('#tblHint').textContent=`${rows.length} names`;
+  $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${preLens-rows.length} trap-profile hidden`:'');
   $('#tbl tbody').innerHTML=rows.slice(0,600).map(r=>{
     const ssc=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
     const up=v=>v==null?'—':`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;
@@ -289,9 +364,13 @@ function renderTable(){
       <td>${r.idx}</td><td>${ssc}</td><td class="l"><span class="chip ${chipCls(r.consensus)}">${r.consensus||'—'}</span></td>
       <td class="l"><span class="chip ${chipCls(r.best_consensus)}">${r.best_consensus||'—'}</span></td>
       <td>${up(r.upside)}</td><td>${up(r.best_upside)}</td>
+      <td>${up(r.tr_3m)}</td><td>${fmt(r.vol_ann,0)}</td>
+      <td>${r.upside_per_vol==null?'—':r.upside_per_vol.toFixed(2)}</td>
+      <td>${r.sector_pct==null?'—':r.sector_pct}</td>
+      <td>${r.bvc_gap==null?'—':(r.bvc_gap>=0?'+':'')+r.bvc_gap.toFixed(1)+'%'}</td>
       <td class="${r.insider==='Positive'?'pos':r.insider==='Negative'?'neg':'neu'}">${r.insider||'—'}</td>
       <td>${fmt(r.div_yield,2)}</td><td>${fmt(r.mktcap_b,1)}</td></tr>`;}).join('')
-    + (rows.length>600?`<tr><td colspan="12" class="l co" style="text-align:center">… ${rows.length-600} more — filter to narrow</td></tr>`:'');
+    + (rows.length>600?`<tr><td colspan="${COLS.length}" class="l co" style="text-align:center">… ${rows.length-600} more — filter to narrow</td></tr>`:'');
 }
 
 function accrual(){
@@ -320,6 +399,7 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   window.dispatchEvent(new Event('resize'));
 }));
 $('#filter').addEventListener('input',renderTable);
+$('#lens').addEventListener('change',renderTable);
 document.addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(!th)return;
   const k=th.dataset.k; if(k===sortKey)sortDir*=-1;else{sortKey=k;sortDir=(k==='ticker'||k==='company'||k==='sector')?1:-1;}renderTable();});
 
