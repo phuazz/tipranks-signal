@@ -8,6 +8,8 @@ Forward-tested study of **TipRanks analyst signals** as cross-sectional predicto
 
 First snapshot captured 2026-07-09 (1,987 names; Mid+Large+Mega, US primary). Ingest and the Norgate merge run on live data; the forward-return analysis is pre-registered but **not yet runnable** (it needs weekly snapshots to accrue). The scoring & selection framework was **frozen 2026-07-10** — five graded schemes, shared construction conventions, KEEP bar and graduation rule (`RESEARCH_MEMO.md`, register rows 3–5); `analyse.py` implements it in a later, mechanical session. See `RESEARCH_MEMO.md`.
 
+Remote: **private** repo at `github.com/phuazz/tipranks-signal` (code and docs only — `data/` is gitignored in full and never pushed, per the IP firewall).
+
 ## Why this shape
 
 There is **no API** on either licence (TipRanks Ultimate, Norgate Platinum — both personal-use). History cannot be pulled, so each week's screener is frozen at capture and the panel accrues going forward. That is the honest design: zero signal-side look-ahead by construction. Known priors (Barber–Lehavy–McNichols–Trueman 2001; Womack 1996) say rating *levels* are largely priced in and turnover-heavy, while rating and target *revisions* and their drift carry the edge — so the primary signal is the revision, not the level, and the headline is drift-adjusted alpha, not raw return.
@@ -44,7 +46,7 @@ npx serve .                           # open http://localhost:PORT/template.html
 python scripts/export_html.py        # one-file snapshot -> data/exports/ (gitignored)
 ```
 
-The export inlines the data and all price series into a single HTML file that opens by double-click (charts need internet for the Plotly CDN). It contains per-name vendor values, so it is for person-to-person discussion only — never hosted, never forwarded onward; the page carries that label. The shareable public layer remains the aggregate findings once verdicts exist.
+The export inlines the data and all price series into a single HTML file that opens by double-click (charts need internet for the Plotly CDN). It contains per-name vendor values, so it is for person-to-person discussion only — never hosted, never forwarded onward; the page carries that label. The shareable public layer remains the aggregate findings once verdicts exist. For anywhere-access, copy the dated export to `OneDrive\Main\tipranks-signal\` alongside the raw CSVs (done for 2026-07-09) — OneDrive is private storage, not publication.
 
 Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sector, flow signals, the **Sector Leaders** board (vol-scaled best-analyst upside per sector, top three labelled), and the liquid-universe table with the view-only lens: trap-profile filter + sector-relative Best↑/σ ranking, ungraded; click any row or leader dot for a PCC-style price chart with 50d/200d averages and analyst-target lines, built per lens-passed name into `data/dashboard/prices/`) and **Accrual** are live now; **Revision Monitor** lights up at snapshot 2 (week-on-week upgrades / target raises / score deltas — the useful part; sector revision breadth staged there too); **Findings** (the drift-adjusted-alpha read) stays locked until ~8 captures; **Literature** is static reference — the research map behind the frozen design and the panel lens.
 
