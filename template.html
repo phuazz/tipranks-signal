@@ -56,7 +56,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.
 .pane{display:none} .pane.active{display:block}
 
 /* kpi strip */
-.kpi-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:20px}
+.kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:20px}
 .kpi{background:var(--bg2);padding:14px 16px}
 .kpi-lab{font-size:10px;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;color:var(--t3);margin-bottom:6px}
 .kpi-val{font-family:var(--mono);font-size:23px;font-weight:700;letter-spacing:-0.5px}
@@ -73,10 +73,20 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.
 .tbl-tools{display:flex;gap:10px;align-items:center;margin:6px 0 10px;flex-wrap:wrap}
 .tbl-tools input{font-family:var(--sans);font-size:13px;padding:7px 11px;border:1px solid var(--bd2);border-radius:var(--radius);background:var(--bg2);min-width:220px}
 .tbl-tools .hint{font-size:11.5px;color:var(--t3)}
-.tbl-wrap{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--radius-lg);background:var(--bg2)}
-table{border-collapse:collapse;width:100%;font-size:12.5px}
-thead th{position:sticky;top:0;background:var(--bg3);text-align:right;padding:9px 11px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--bd2);cursor:pointer;white-space:nowrap}
+.tbl-wrap{overflow:auto;max-height:72vh;border:1px solid var(--bd);border-radius:var(--radius-lg);background:var(--bg2)}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
+thead th{position:sticky;top:0;z-index:3;background:var(--bg3);text-align:right;padding:9px 11px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--bd2);cursor:pointer;white-space:nowrap}
 thead th.l{text-align:left}
+thead th:first-child{position:sticky;left:0;z-index:4}
+tbody td:first-child{position:sticky;left:0;background:var(--bg2);z-index:1}
+tbody tr:hover td:first-child{background:var(--bg-hover)}
+.chiprow{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;align-items:center}
+.chiprow .lab{font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t3);margin-right:2px}
+.chipbtn{font-family:var(--sans);font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid var(--bd2);background:var(--bg2);color:var(--t2);cursor:pointer}
+.chipbtn:hover{background:var(--bg-hover)}
+.chipbtn.on{background:var(--t1);color:var(--bg2);border-color:var(--t1)}
+.kpi.click{cursor:pointer}
+.kpi.click:hover{background:var(--bg-hover)}
 tbody td{padding:7px 11px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
 tbody td.l{text-align:left;font-family:var(--sans)}
 tbody tr:hover{background:var(--bg-hover)}
@@ -164,10 +174,11 @@ tbody tr{cursor:pointer}
         <span class="hint" id="tblHint">—</span>
         <span class="hint">· click a row for its price chart · hover a header for definitions · the lens (3-mo return below universe median / negative insider / Smart Score ≤ 4) is view-only and ungraded — see the Literature tab</span>
       </div>
+      <div class="chiprow" id="secChips"></div>
       <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="grid">
-      <div class="card"><h3>Smart Score distribution</h3><div class="cap">Count of liquid names by TipRanks Smart Score (1 = bearish, 10 = bullish).</div><div id="cSS" class="chart"></div></div>
+      <div class="card"><h3>Smart Score distribution</h3><div class="cap">Count of liquid names by TipRanks Smart Score (1 = bearish, 10 = bullish) — the 8-factor composite is explained on the Literature tab.</div><div id="cSS" class="chart"></div></div>
       <div class="card"><h3>Analyst consensus mix</h3><div class="cap">How lopsided the ratings are — why the <em>level</em> alone rarely differentiates.</div><div id="cCons" class="chart"></div></div>
     </div>
     <div class="grid">
@@ -270,6 +281,14 @@ tbody tr{cursor:pointer}
         </ul>
       </div>
     </div>
+    <div class="card lit-card">
+      <h3>What the Smart Score is</h3>
+      <div class="cap">TipRanks' proprietary 1–10 composite. Components as documented by the vendor; weights undisclosed.</div>
+      <ul>
+        <li>Eight inputs: <b>analyst consensus</b> · <b>blogger opinion</b> · <b>insider transactions</b> · <b>hedge-fund activity</b> (13F-based, quarterly — stale at weekly cadence) · <b>news sentiment</b> · <b>crowd (individual-investor) sentiment</b> · <b>technicals</b> (momentum) · <b>fundamentals</b> (return on equity, asset growth). <span class="hook">vendor composite</span></li>
+        <li>The vendor claim — top-decile Smart Score outperforms — is tested once, as-is, as scheme <b>S1c</b> on the frozen menu. The score <b>embeds the analyst consensus</b>, so it never gates another analyst signal (recursion guard); its exposed sub-axes in the export (insider / hedge-fund / news / sentiment) serve as attribution of any S1c grade and are never graded themselves. <span class="hook">S1c · attribution only</span></li>
+      </ul>
+    </div>
   </div>
 
   <div class="foot" id="foot">—</div>
@@ -282,7 +301,8 @@ tbody tr{cursor:pointer}
       <div><span class="tk mono" id="chTk" style="font-size:17px"></span> <span class="co" id="chCo"></span></div>
       <button class="ovl-close" id="chClose">close ✕</button>
     </div>
-    <div class="cap" id="chMeta" style="margin-bottom:8px">—</div>
+    <div class="cap" id="chMeta" style="margin-bottom:6px">—</div>
+    <div class="cap" id="chWhy" style="margin-bottom:8px;line-height:1.55">—</div>
     <div id="cPrice" style="height:390px"></div>
     <div class="cap" style="margin-top:8px">Total-return series (dividends reinvested) — the latest point equals the actual price; earlier history is adjusted. Dotted lines are analyst targets: implied, not validated. 50d / 200d are session moving averages.</div>
   </div>
@@ -319,17 +339,32 @@ function ssColor(v){
 }
 const bucket = k => /positive|bullish/i.test(k)?'pos':(/negative|bearish/i.test(k)?'neg':'neu');
 
+// day gap between a rating date and the capture date via the Date library (no manual offsets)
+function dayGap(dstr){
+  if(!dstr)return null;
+  const t=Date.parse(dstr), a=Date.parse(D.as_of);
+  if(isNaN(t)||isNaN(a))return null;
+  return Math.round((a-t)/86400000);
+}
 function kpis(){
-  const u=D.universe, k=D.kpis;
+  const u=D.universe, k=D.kpis, T=D.table;
+  const pass=T.filter(r=>r.lens_pass);
+  const uv=pass.filter(r=>r.upside_per_vol!=null).sort((a,b)=>b.upside_per_vol-a.upside_per_vol);
+  const lead=uv[0]||null;
+  const medUV=uv.length?uv[Math.floor(uv.length/2)].upside_per_vol:null;
+  const fresh=uv.filter(r=>r.upside_per_vol>=medUV&&dayGap(r.last_rating)!=null)
+    .sort((a,b)=>dayGap(a.last_rating)-dayGap(b.last_rating))[0]||null;
   const rows=[
-    ['Liquid universe', k.n_liquid, `${u.sp500} S&P 500 · ${u.sp400} MidCap 400`],
-    ['Median Smart Score', fmt(k.median_smart_score,1), 'of 10'],
-    ['Buy-rated', k.pct_buy+'%', 'Strong + Moderate Buy'],
-    ['Median upside', pct(k.median_upside), 'all-analyst target'],
-    ['Best-analyst upside', pct(k.median_best_upside), 'top-analyst target'],
-    ['Matched', u.matched+' / '+u.snapshot_total, 'of the export']
+    ['Liquid universe', k.n_liquid, `${u.sp500} S&P 500 · ${u.sp400} MidCap 400 · matched ${u.matched}/${u.snapshot_total} of the export`, null],
+    ['Panel skew — why we rank', k.pct_buy+'% buy', `median upside ${pct(k.median_upside)} · levels do not differentiate — rank within sector`, null],
+    ['Pass the trap lens', `${pass.length} of ${k.n_liquid}`, 'price / insider / score gate — view-only, ungraded', null]
   ];
-  $('#kpis').innerHTML = rows.map(r=>`<div class="kpi"><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
+  if(lead)rows.push(['Board leader — upside ÷ vol', `${lead.ticker} ${lead.upside_per_vol.toFixed(2)}`,
+    `${pct(lead.best_upside)} on ${fmt(lead.vol_ann,0)}% vol · rated ${dayGap(lead.last_rating)!=null?dayGap(lead.last_rating)+'d ago':'—'} · click for chart`, lead.ticker]);
+  if(fresh)rows.push(['Freshest strong name', `${fresh.ticker} · ${dayGap(fresh.last_rating)}d`,
+    `newest rating among above-median upside ÷ vol (${fresh.upside_per_vol.toFixed(2)}) · click for chart`, fresh.ticker]);
+  $('#kpis').innerHTML = rows.map(r=>`<div class="kpi${r[3]?' click':''}"${r[3]?` data-t="${r[3]}"`:''}><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
+  document.querySelectorAll('#kpis .kpi.click').forEach(el=>el.addEventListener('click',()=>openChart(el.dataset.t)));
 }
 
 function chartSS(){
@@ -417,6 +452,7 @@ function closeChart(){$('#chartOvl').classList.remove('open');}
 function openChart(t){
   const r=D.table.find(x=>x.ticker===t); if(!r)return;
   $('#chTk').textContent=r.ticker; $('#chCo').textContent=r.company||'';
+  $('#chWhy').innerHTML=whyProfile(r);
   $('#chMeta').textContent='loading…';
   $('#chartOvl').classList.add('open');
   Plotly.purge('cPrice');
@@ -464,7 +500,7 @@ const COLS=[
   ['company','Company','l',''],
   ['sector','Sector','l',''],
   ['idx','Index','r','S&P 500 or MidCap 400 (point-in-time member at capture)'],
-  ['smart_score','Score','r','TipRanks Smart Score: 1 bearish to 10 bullish'],
+  ['smart_score','Score','r','TipRanks Smart Score, 1 bearish to 10 bullish — proprietary 8-factor composite: analyst consensus, blogger opinion, insider activity, hedge-fund activity (quarterly 13F), news sentiment, crowd sentiment, technicals, fundamentals. It embeds the consensus, so it never gates other analyst signals; graded once as S1c — see the Literature tab'],
   ['consensus','Consensus','l','All-analyst consensus rating'],
   ['best_consensus','Best analysts','l','Consensus of top-ranked analysts only'],
   ['upside','Target upside','r','All-analyst consensus price target vs the current price'],
@@ -480,6 +516,43 @@ const COLS=[
 ];
 let sortKey='sector_pct', sortDir=-1;
 function chipCls(v){return v==='Strong Buy'?'chip-sb':v==='Moderate Buy'?'chip-mb':v==='Hold'?'chip-h':v?'chip-s':''}
+
+const SEL={sectors:new Set(), minScore:0};
+function buildChips(){
+  const secs=[...new Set(D.table.map(r=>r.sector).filter(Boolean))].sort();
+  const c=$('#secChips');
+  c.innerHTML='<span class="lab">Sector</span>'
+    +secs.map(s=>`<button class="chipbtn" data-s="${s}">${s}</button>`).join('')
+    +'<span class="lab" style="margin-left:14px">Min score</span>'
+    +[[0,'Any'],[6,'6+'],[8,'8+']].map(x=>`<button class="chipbtn scoreb${x[0]===0?' on':''}" data-m="${x[0]}">${x[1]}</button>`).join('');
+  c.addEventListener('click',e=>{const b=e.target.closest('.chipbtn');if(!b)return;
+    if(b.dataset.s!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.sectors.add(b.dataset.s);else SEL.sectors.delete(b.dataset.s);}
+    else{SEL.minScore=+b.dataset.m;c.querySelectorAll('.scoreb').forEach(x=>x.classList.toggle('on',+x.dataset.m===SEL.minScore));}
+    renderTable();});
+}
+
+// mechanical screen profile assembled from the row's own fields — not a thesis
+function whyProfile(r){
+  const good=[],warn=[];
+  if(r.consensus==='Strong Buy'&&r.best_consensus==='Strong Buy')good.push('all-analyst and best-analyst consensus agree at Strong Buy');
+  else if(r.best_consensus==='Strong Buy')good.push('best analysts at Strong Buy');
+  if(r.smart_score>=8)good.push(`Smart Score ${r.smart_score}`);
+  if(r.sector_pct!=null&&r.sector_pct>=70)good.push(`top ${100-r.sector_pct}% of sector on upside ÷ vol (${r.upside_per_vol!=null?r.upside_per_vol.toFixed(2):'—'})`);
+  if(r.insider==='Positive')good.push('positive insider signal');
+  if(r.tr_3m!=null&&r.tr_3m>0)good.push(`price confirming, +${r.tr_3m.toFixed(1)}% over 3 months`);
+  if(r.div_yield>=2)good.push(`${r.div_yield.toFixed(1)}% trailing yield`);
+  const d=dayGap(r.last_rating);
+  if(d!=null&&d<=30)good.push(`fresh rating, ${d}d ago`);
+  if(d!=null&&d>30)warn.push(`last rating ${d} days old — wide upside may be a stale target mean-reverting to price`);
+  if(r.smart_score!=null&&r.smart_score<=4)warn.push(`Smart Score ${r.smart_score} — weak composite`);
+  if(r.tr_3m!=null&&r.tr_3m<0)warn.push(`price falling, ${r.tr_3m.toFixed(1)}% over 3 months, against a bullish target — trap profile`);
+  if(r.insider==='Negative')warn.push('net insider selling');
+  if(r.bvc_gap!=null&&Math.abs(r.bvc_gap)>=10)warn.push(`best-vs-consensus gap ${(r.bvc_gap>=0?'+':'')+r.bvc_gap.toFixed(1)}% — analyst disagreement, when targets are least reliable`);
+  if(!r.lens_pass)warn.push('fails the trap lens');
+  return `<b>Screen profile</b> — mechanical, from this week's fields, not a thesis: ${good.length?good.join('; '):'nothing stands out'}.`
+    +(warn.length?` <b>Caveats:</b> ${warn.join('; ')}.`:'')
+    +' Analyst-implied and ungraded.';
+}
 function renderTable(){
   const th=COLS.map(c=>`<th class="${c[2]==='l'?'l':''}" data-k="${c[0]}" title="${c[3]||''}">${c[1]}${sortKey===c[0]?(sortDir<0?' ▾':' ▴'):''}</th>`).join('');
   $('#tbl thead').innerHTML='<tr>'+th+'</tr>';
@@ -488,9 +561,12 @@ function renderTable(){
   let rows=D.table.filter(r=>!q||(r.ticker+' '+(r.company||'')+' '+(r.sector||'')).toLowerCase().includes(q));
   const preLens=rows.length;
   if(lensOn) rows=rows.filter(r=>r.lens_pass);
+  const lensHidden=preLens-rows.length;
+  if(SEL.sectors.size) rows=rows.filter(r=>SEL.sectors.has(r.sector));
+  if(SEL.minScore) rows=rows.filter(r=>r.smart_score!=null&&r.smart_score>=SEL.minScore);
   rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];if(x==null)return 1;if(y==null)return -1;
     return (typeof x==='number'?x-y:(''+x).localeCompare(''+y))*sortDir;});
-  $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${preLens-rows.length} trap-profile hidden`:'');
+  $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${lensHidden} trap-profile hidden`:'');
   $('#tbl tbody').innerHTML=rows.slice(0,600).map(r=>{
     const ssc=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
     const up=v=>v==null?'—':`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;
@@ -523,7 +599,7 @@ function accrual(){
 function boot(){
   $('#pillDate').textContent='as of '+D.as_of;
   $('#foot').textContent=`Generated ${D.generated_utc} · liquid universe ${D.universe.indices.join(' + ')} · PRIVATE / personal-use — TipRanks & Norgate values stay local, never published.`;
-  kpis(); chartSS(); chartCons(); chartSector(); chartSent(); chartLeaders(); renderTable(); accrual();
+  kpis(); chartSS(); chartCons(); chartSector(); chartSent(); chartLeaders(); buildChips(); renderTable(); accrual();
 }
 
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
