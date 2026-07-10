@@ -104,6 +104,8 @@ def main() -> int:
         "most_accurate": r.get("most_accurate_analyst"),
         "most_profitable": r.get("most_profitable_analyst"),
         "last_rating": r.get("last_rating_date"),
+        "news": r.get("news_sentiment"),
+        "investor": r.get("investor_sentiment"),
     } for r in liquid]
 
     # --- view-layer lens (ungraded; mirrors the frozen S3 gate inputs) ---------

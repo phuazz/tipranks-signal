@@ -75,7 +75,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.
 .tbl-tools .hint{font-size:11.5px;color:var(--t3)}
 .tbl-wrap{overflow:auto;max-height:72vh;border:1px solid var(--bd);border-radius:var(--radius-lg);background:var(--bg2)}
 table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
-thead th{position:sticky;top:0;z-index:3;background:var(--bg3);text-align:right;padding:9px 11px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--bd2);cursor:pointer;white-space:nowrap}
+thead th{position:sticky;top:0;z-index:3;background:var(--bg3);text-align:right;padding:9px 9px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--bd2);cursor:pointer;white-space:nowrap}
 thead th.l{text-align:left}
 thead th:first-child{position:sticky;left:0;z-index:4}
 tbody td:first-child{position:sticky;left:0;background:var(--bg2);z-index:1}
@@ -87,7 +87,7 @@ tbody tr:hover td:first-child{background:var(--bg-hover)}
 .chipbtn.on{background:var(--t1);color:var(--bg2);border-color:var(--t1)}
 .kpi.click{cursor:pointer}
 .kpi.click:hover{background:var(--bg-hover)}
-tbody td{padding:7px 11px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
+tbody td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
 tbody td.l{text-align:left;font-family:var(--sans)}
 tbody tr:hover{background:var(--bg-hover)}
 .tk{font-weight:700;color:var(--t1)}
@@ -496,37 +496,38 @@ function openChart(t){
 }
 
 const COLS=[
-  ['ticker','Ticker','l','Click the row for the price chart'],
-  ['company','Company','l',''],
+  ['ticker','Name','l','Click the row for the price chart'],
   ['sector','Sector','l',''],
-  ['idx','Index','r','S&P 500 or MidCap 400 (point-in-time member at capture)'],
   ['smart_score','Score','r','TipRanks Smart Score, 1 bearish to 10 bullish — proprietary 8-factor composite: analyst consensus, blogger opinion, insider activity, hedge-fund activity (quarterly 13F), news sentiment, crowd sentiment, technicals, fundamentals. It embeds the consensus, so it never gates other analyst signals; graded once as S1c — see the Literature tab'],
   ['consensus','Consensus','l','All-analyst consensus rating'],
   ['best_consensus','Best analysts','l','Consensus of top-ranked analysts only'],
   ['upside','Target upside','r','All-analyst consensus price target vs the current price'],
   ['best_upside','Best upside','r','Best-analyst price target vs the current price'],
-  ['tr_3m','3-mo return','r','Total return over the trailing 63 sessions; the lens hides names below the universe median'],
+  ['tr_3m','3-mo ret','r','Total return over the trailing 63 sessions; the lens hides names below the universe median'],
   ['vol_ann','Volatility','r','Annualised daily volatility over the same ~3-month window'],
   ['upside_per_vol','Upside ÷ vol','r','Best-analyst upside per unit of annualised volatility — target distance in years of risk'],
   ['sector_pct','Sector rank','r','Percentile of Upside ÷ vol within the sector (100 = most upside per unit of risk among peers). Upside ranks within sector, not across the market'],
   ['bvc_gap','Best − cons.','r','Best-analyst target vs the consensus target; a wide gap means analyst disagreement, when consensus targets are least reliable'],
   ['insider','Insider','r','TipRanks insider signal; Negative is hidden by the lens'],
-  ['div_yield','Div yld','r','Trailing dividend yield, % (style control, not a signal)'],
+  ['div_yield','Yld %','r','Trailing dividend yield, % (style control, not a signal)'],
   ['mktcap_b','Cap $B','r','Market capitalisation, USD billions']
 ];
 let sortKey='sector_pct', sortDir=-1;
 function chipCls(v){return v==='Strong Buy'?'chip-sb':v==='Moderate Buy'?'chip-mb':v==='Hold'?'chip-h':v?'chip-s':''}
 
-const SEL={sectors:new Set(), minScore:0};
+const SEL={sectors:new Set(), minScore:0, idx:new Set()};
 function buildChips(){
   const secs=[...new Set(D.table.map(r=>r.sector).filter(Boolean))].sort();
   const c=$('#secChips');
   c.innerHTML='<span class="lab">Sector</span>'
     +secs.map(s=>`<button class="chipbtn" data-s="${s}">${s}</button>`).join('')
     +'<span class="lab" style="margin-left:14px">Min score</span>'
-    +[[0,'Any'],[6,'6+'],[8,'8+']].map(x=>`<button class="chipbtn scoreb${x[0]===0?' on':''}" data-m="${x[0]}">${x[1]}</button>`).join('');
+    +[[0,'Any'],[6,'6+'],[8,'8+']].map(x=>`<button class="chipbtn scoreb${x[0]===0?' on':''}" data-m="${x[0]}">${x[1]}</button>`).join('')
+    +'<span class="lab" style="margin-left:14px">Index</span>'
+    +[['500','S&P 500'],['400','MidCap 400']].map(x=>`<button class="chipbtn" data-i="${x[0]}">${x[1]}</button>`).join('');
   c.addEventListener('click',e=>{const b=e.target.closest('.chipbtn');if(!b)return;
     if(b.dataset.s!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.sectors.add(b.dataset.s);else SEL.sectors.delete(b.dataset.s);}
+    else if(b.dataset.i!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.idx.add(b.dataset.i);else SEL.idx.delete(b.dataset.i);}
     else{SEL.minScore=+b.dataset.m;c.querySelectorAll('.scoreb').forEach(x=>x.classList.toggle('on',+x.dataset.m===SEL.minScore));}
     renderTable();});
 }
@@ -539,6 +540,7 @@ function whyProfile(r){
   if(r.smart_score>=8)good.push(`Smart Score ${r.smart_score}`);
   if(r.sector_pct!=null&&r.sector_pct>=70)good.push(`top ${100-r.sector_pct}% of sector on upside ÷ vol (${r.upside_per_vol!=null?r.upside_per_vol.toFixed(2):'—'})`);
   if(r.insider==='Positive')good.push('positive insider signal');
+  if(/bullish/i.test(r.news||''))good.push(`news sentiment ${r.news}`);
   if(r.tr_3m!=null&&r.tr_3m>0)good.push(`price confirming, +${r.tr_3m.toFixed(1)}% over 3 months`);
   if(r.div_yield>=2)good.push(`${r.div_yield.toFixed(1)}% trailing yield`);
   const d=dayGap(r.last_rating);
@@ -547,6 +549,8 @@ function whyProfile(r){
   if(r.smart_score!=null&&r.smart_score<=4)warn.push(`Smart Score ${r.smart_score} — weak composite`);
   if(r.tr_3m!=null&&r.tr_3m<0)warn.push(`price falling, ${r.tr_3m.toFixed(1)}% over 3 months, against a bullish target — trap profile`);
   if(r.insider==='Negative')warn.push('net insider selling');
+  if(/bearish/i.test(r.news||''))warn.push(`news sentiment ${r.news}`);
+  if(/negative/i.test(r.investor||''))warn.push(`individual-investor sentiment ${r.investor}`);
   if(r.bvc_gap!=null&&Math.abs(r.bvc_gap)>=10)warn.push(`best-vs-consensus gap ${(r.bvc_gap>=0?'+':'')+r.bvc_gap.toFixed(1)}% — analyst disagreement, when targets are least reliable`);
   if(!r.lens_pass)warn.push('fails the trap lens');
   return `<b>Screen profile</b> — mechanical, from this week's fields, not a thesis: ${good.length?good.join('; '):'nothing stands out'}.`
@@ -564,14 +568,15 @@ function renderTable(){
   const lensHidden=preLens-rows.length;
   if(SEL.sectors.size) rows=rows.filter(r=>SEL.sectors.has(r.sector));
   if(SEL.minScore) rows=rows.filter(r=>r.smart_score!=null&&r.smart_score>=SEL.minScore);
+  if(SEL.idx.size) rows=rows.filter(r=>SEL.idx.has(r.idx));
   rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];if(x==null)return 1;if(y==null)return -1;
     return (typeof x==='number'?x-y:(''+x).localeCompare(''+y))*sortDir;});
   $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${lensHidden} trap-profile hidden`:'');
   $('#tbl tbody').innerHTML=rows.slice(0,600).map(r=>{
     const ssc=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
     const up=v=>v==null?'—':`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;
-    return `<tr data-t="${r.ticker}"><td class="l tk">${r.ticker}${r.chart?' <span style="color:var(--t4);font-size:9px">▸</span>':''}</td><td class="l co">${r.company||''}</td><td class="l co">${r.sector||''}</td>
-      <td>${r.idx}</td><td>${ssc}</td><td class="l"><span class="chip ${chipCls(r.consensus)}">${r.consensus||'—'}</span></td>
+    return `<tr data-t="${r.ticker}"><td class="l tk">${r.ticker}${r.chart?' <span style="color:var(--t4);font-size:9px">▸</span>':''}<div class="co" style="font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${r.company||''}</div></td><td class="l co">${r.sector||''}</td>
+      <td>${ssc}</td><td class="l"><span class="chip ${chipCls(r.consensus)}">${r.consensus||'—'}</span></td>
       <td class="l"><span class="chip ${chipCls(r.best_consensus)}">${r.best_consensus||'—'}</span></td>
       <td>${up(r.upside)}</td><td>${up(r.best_upside)}</td>
       <td>${up(r.tr_3m)}</td><td>${fmt(r.vol_ann,0)}</td>
