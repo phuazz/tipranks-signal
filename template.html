@@ -150,18 +150,11 @@ tbody tr{cursor:pointer}
   <!-- PANEL STATE -->
   <div class="pane active" id="pane-panel">
     <div class="kpi-strip" id="kpis"></div>
-    <div class="grid">
-      <div class="card"><h3>Smart Score distribution</h3><div class="cap">Count of liquid names by TipRanks Smart Score (1 = bearish, 10 = bullish).</div><div id="cSS" class="chart"></div></div>
-      <div class="card"><h3>Analyst consensus mix</h3><div class="cap">How lopsided the ratings are — why the <em>level</em> alone rarely differentiates.</div><div id="cCons" class="chart"></div></div>
-    </div>
-    <div class="grid">
-      <div class="card"><h3>By sector — coverage &amp; mean Smart Score</h3><div class="cap">Bar = number of names; label = mean Smart Score.</div><div id="cSector" class="chart"></div></div>
-      <div class="card"><h3>Flow signals (share of names)</h3><div class="cap">Insider / hedge-fund / individual-investor stance, bucketed positive / neutral / negative.</div><div id="cSent" class="chart"></div></div>
-    </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Sector leaders — who looks attractive, and by how much</h3>
-      <div class="cap">One row per sector; each dot is a lens-passed name placed by <b>best-analyst upside per unit of volatility</b> — the ex-ante magnitude of attractiveness (analyst-implied, ungraded). The top three per sector are labelled; colour = Smart Score; sectors ordered by their best name. Click any dot for the price chart.</div>
-      <div id="cLeaders" class="chart" style="height:460px"></div>
+      <div class="cap"><b>Position</b> = best-analyst upside per unit of volatility, the magnitude of ex-ante attractiveness (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score (red 1 → green 10) · the top three per sector are labelled · sectors ordered by their best name, lens-passed count in brackets. Click any dot for its price chart.</div>
+      <div class="note" style="margin:6px 0 10px;font-size:11.5px"><b>Caveats from the literature (details on the Literature tab):</b> analysts realise roughly 16–18 cents per dollar of claimed upside — read position as direction, not forecast. A far-right dot that got there through a recent price fall is usually a <em>stale target mean-reverting down to price</em>, not conviction; the trap gate removes the worst, and the chart click is the check for the rest. Implied upside compares reliably <b>within a row</b> — cross-sector comparison stands on weaker evidence (Da &amp; Schaumburg). Analyst-implied and ungraded throughout.</div>
+      <div id="cLeaders" class="chart" style="height:470px"></div>
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Liquid universe — the panel</h3>
@@ -172,6 +165,14 @@ tbody tr{cursor:pointer}
         <span class="hint">· click a row for its price chart · hover a header for definitions · the lens (3-mo return below universe median / negative insider / Smart Score ≤ 4) is view-only and ungraded — see the Literature tab</span>
       </div>
       <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="grid">
+      <div class="card"><h3>Smart Score distribution</h3><div class="cap">Count of liquid names by TipRanks Smart Score (1 = bearish, 10 = bullish).</div><div id="cSS" class="chart"></div></div>
+      <div class="card"><h3>Analyst consensus mix</h3><div class="cap">How lopsided the ratings are — why the <em>level</em> alone rarely differentiates.</div><div id="cCons" class="chart"></div></div>
+    </div>
+    <div class="grid">
+      <div class="card"><h3>By sector — coverage &amp; mean Smart Score</h3><div class="cap">Bar = number of names; label = mean Smart Score.</div><div id="cSector" class="chart"></div></div>
+      <div class="card"><h3>Flow signals (share of names)</h3><div class="cap">Insider / hedge-fund / individual-investor stance, bucketed positive / neutral / negative.</div><div id="cSent" class="chart"></div></div>
     </div>
   </div>
 
@@ -369,25 +370,38 @@ function chartLeaders(){
   const rows=D.table.filter(r=>r.lens_pass&&r.upside_per_vol!=null);
   if(!rows.length){Plotly.purge('cLeaders');return;}
   const by={};rows.forEach(r=>{const s=r.sector||'—';(by[s]=by[s]||[]).push(r);});
+  const label={};Object.keys(by).forEach(s=>{label[s]=`${s} (${by[s].length})`;});
   const secs=Object.keys(by).sort((a,b)=>Math.max(...by[b].map(r=>r.upside_per_vol))-Math.max(...by[a].map(r=>r.upside_per_vol)));
-  const ordered=[...secs].reverse();   // plotly categorical axes draw bottom-up
-  const hov=r=>`<b>${r.ticker}</b> ${r.company||''}<br>best upside ${pct(r.best_upside)} on vol ${fmt(r.vol_ann,0)}% → ${r.upside_per_vol.toFixed(2)}<br>3-mo ${pct(r.tr_3m)} · Score ${r.smart_score!=null?r.smart_score:'—'} · sector rank ${r.sector_pct!=null?r.sector_pct:'—'}`;
-  const base={type:'scatter',mode:'markers',x:[],y:[],text:[],hovertemplate:'%{text}<extra></extra>',marker:{size:8,opacity:0.45,color:[]},customdata:[]};
-  const top={type:'scatter',mode:'markers+text',x:[],y:[],text:[],hovertext:[],hovertemplate:'%{hovertext}<extra></extra>',textposition:'middle right',textfont:{family:'JetBrains Mono',size:10,color:tok('--t1')},marker:{size:12,opacity:0.95,color:[],line:{width:1,color:'#fff'}},customdata:[]};
+  const ordered=secs.map(s=>label[s]).reverse();   // plotly categorical axes draw bottom-up
+  const xs=rows.map(r=>r.upside_per_vol);
+  const xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs), span=(xmax-xmin)||1;
+  const med=[...xs].sort((a,b)=>a-b)[Math.floor(xs.length/2)];
+  const dotSize=c=>Math.max(6,Math.min(17,6+3.2*Math.log10(Math.max(c||1,1)/2)));   // $B, log scale
+  const hov=r=>`<b>${r.ticker}</b> ${r.company||''}<br>best upside ${pct(r.best_upside)} on vol ${fmt(r.vol_ann,0)}% → ${r.upside_per_vol.toFixed(2)}<br>3-mo ${pct(r.tr_3m)} · Score ${r.smart_score!=null?r.smart_score:'—'} · $${fmt(r.mktcap_b,1)}B cap · sector rank ${r.sector_pct!=null?r.sector_pct:'—'}`;
+  const base={type:'scatter',mode:'markers',x:[],y:[],text:[],hovertemplate:'%{text}<extra></extra>',cliponaxis:false,marker:{size:[],opacity:0.45,color:[]},customdata:[]};
+  const top={type:'scatter',mode:'markers+text',x:[],y:[],text:[],hovertext:[],hovertemplate:'%{hovertext}<extra></extra>',cliponaxis:false,textposition:[],textfont:{family:'JetBrains Mono',size:10,color:tok('--t1')},marker:{size:[],opacity:1,color:[],line:{width:1.4,color:'#fff'}},customdata:[]};
+  const TPOS=['middle right','top right','bottom right'];   // staggered anchors so near-equal leaders do not collide
   secs.forEach(s=>{
     const rs=[...by[s]].sort((a,b)=>b.upside_per_vol-a.upside_per_vol);
     rs.forEach((r,i)=>{
       const t=i<3?top:base;
-      t.x.push(r.upside_per_vol);t.y.push(s);t.customdata.push(r.ticker);
+      t.x.push(r.upside_per_vol);t.y.push(label[s]);t.customdata.push(r.ticker);
+      t.marker.size.push(dotSize(r.mktcap_b));
       t.marker.color.push(ssColor(r.smart_score!=null?r.smart_score:5));
-      if(i<3){t.text.push(' '+r.ticker);t.hovertext.push(hov(r));}else{t.text.push(hov(r));}
+      if(i<3){t.text.push(' '+r.ticker);t.hovertext.push(hov(r));t.textposition.push(TPOS[i]);}
+      else{t.text.push(hov(r));}
     });
   });
   const L=Object.assign(CAT(),{
-    height:460,hovermode:'closest',showlegend:false,
-    margin:{t:8,b:42,l:150,r:64},
-    xaxis:{title:{text:'best-analyst upside ÷ annualised volatility',font:{size:10}},gridcolor:tok('--bg-hover'),zeroline:false,linecolor:tok('--bd2'),showgrid:true,tickfont:{size:10,family:'JetBrains Mono'},fixedrange:true},
-    yaxis:{categoryorder:'array',categoryarray:ordered,gridcolor:tok('--bg4'),showgrid:true,tickfont:{size:11},fixedrange:true}
+    height:470,hovermode:'closest',showlegend:false,
+    margin:{t:20,b:42,l:172,r:36},
+    xaxis:{title:{text:'best-analyst upside ÷ annualised volatility (0 = no implied upside)',font:{size:10}},
+      range:[xmin-0.07*span,xmax+0.17*span],
+      gridcolor:tok('--bg-hover'),zeroline:true,zerolinecolor:tok('--bd-strong'),zerolinewidth:1,
+      linecolor:tok('--bd2'),showgrid:true,tickfont:{size:10,family:'JetBrains Mono'},fixedrange:true},
+    yaxis:{categoryorder:'array',categoryarray:ordered,gridcolor:tok('--bg4'),showgrid:true,tickfont:{size:11},fixedrange:true},
+    shapes:[{type:'line',yref:'paper',y0:0,y1:1,x0:med,x1:med,line:{color:tok('--t4'),width:1,dash:'dot'}}],
+    annotations:[{yref:'paper',y:1,x:med,yanchor:'bottom',text:'panel median',showarrow:false,font:{size:9,color:tok('--t3')}}]
   });
   Plotly.newPlot('cLeaders',[base,top],L,CFG).then(gd=>{
     gd.on('plotly_click',ev=>{const p=ev.points&&ev.points[0];if(p&&p.customdata)openChart(p.customdata);});
