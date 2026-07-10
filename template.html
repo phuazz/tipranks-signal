@@ -97,6 +97,17 @@ tbody tr:hover td:first-child{background:var(--bg-hover)}
 .sb-val{font-family:var(--mono);font-weight:700;flex:0 0 48px;text-align:right}
 .sb-ctx{color:var(--t3);font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sb-stale{color:var(--r);font-weight:600}
+.ss-legend{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--t3);font-family:var(--mono);vertical-align:middle}
+.ss-grad{display:inline-block;width:56px;height:6px;border-radius:3px;background:linear-gradient(90deg,#c0392b,#b45309,#1a8754)}
+/* chart overlay stat strip + screen profile */
+.stat-strip{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 8px}
+.stat .sl{display:block;font-size:9px;text-transform:uppercase;letter-spacing:0.7px;font-weight:700;color:var(--t3);margin-bottom:1px}
+.stat .sv{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--t1)}
+#chWhy{font-size:12.5px;color:var(--t2);line-height:1.6}
+.wp-line{margin:2px 0}
+.wp-good{color:var(--g);font-weight:700;margin-right:4px}
+.wp-warn{color:#b45309;font-weight:700;margin-right:4px}
+.wp-tail{font-size:10.5px;color:var(--t4);margin-top:3px}
 tbody td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
 tbody td.l{text-align:left;font-family:var(--sans)}
 tbody tr:hover{background:var(--bg-hover)}
@@ -171,12 +182,12 @@ tbody tr{cursor:pointer}
   <div class="pane active" id="pane-panel">
     <div class="kpi-strip" id="kpis"></div>
     <div class="grid">
-      <div class="card"><h3>Board leaders — top 5 by upside ÷ vol</h3><div class="cap">Lens-passed names on the ex-ante Sharpe-like scale · bar length = magnitude, bar colour = Smart Score · click a row for its chart.</div><div id="sbLead"></div></div>
-      <div class="card"><h3>Freshest strong names — top 5 by rating recency</h3><div class="cap">Newest analyst action among lens-passed names with above-median upside ÷ vol — the closest proxy to the revision signal until snapshot 2 · click a row for its chart.</div><div id="sbFresh"></div></div>
+      <div class="card"><h3>Board leaders — top 5 by upside ÷ vol</h3><div class="cap">Lens-passed names on the ex-ante Sharpe-like scale · bar length = upside ÷ vol vs the leader · bar colour = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · click a row for its chart.</div><div id="sbLead"></div></div>
+      <div class="card"><h3>Freshest strong names — top 5 by rating recency</h3><div class="cap">Newest analyst action among lens-passed names with above-median upside ÷ vol — the closest proxy to the revision signal until snapshot 2 · bars as at left: length = upside ÷ vol, colour = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · click a row for its chart.</div><div id="sbFresh"></div></div>
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Sector leaders — who looks attractive, and by how much</h3>
-      <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score (red 1 → green 10) · the top three per sector are labelled · sectors ordered by their best name, lens-passed count in brackets. Hover for the analyst detail; click any dot for its price chart.</div>
+      <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · the top three per sector are labelled · sectors ordered by their best name, lens-passed count in brackets. Hover for the analyst detail; click any dot for its price chart.</div>
       <div class="note" style="margin:6px 0 10px;font-size:11.5px"><b>Caveats from the literature (details on the Literature tab):</b> analysts realise roughly 16–18 cents per dollar of claimed upside — read position as direction, not forecast. A far-right dot that got there through a recent price fall is usually a <em>stale target mean-reverting down to price</em>, not conviction; the trap gate removes the worst, and the chart click is the check for the rest. Implied upside compares reliably <b>within a row</b> — cross-sector comparison stands on weaker evidence (Da &amp; Schaumburg). Analyst-implied and ungraded throughout.</div>
       <div id="cLeaders" class="chart" style="height:470px"></div>
     </div>
@@ -469,7 +480,8 @@ function chartLeaders(){
 function closeChart(){$('#chartOvl').classList.remove('open');}
 function openChart(t){
   const r=D.table.find(x=>x.ticker===t); if(!r)return;
-  $('#chTk').textContent=r.ticker; $('#chCo').textContent=r.company||'';
+  $('#chTk').textContent=r.ticker;
+  $('#chCo').textContent=[r.company,r.sector,(r.idx==='500'?'S&P 500':'MidCap 400')].filter(Boolean).join(' · ');
   $('#chWhy').innerHTML=whyProfile(r);
   $('#chMeta').textContent='loading…';
   $('#chartOvl').classList.add('open');
@@ -487,12 +499,19 @@ function openChart(t){
 }
 function renderPrice(r,h){
       const last=h.close[h.close.length-1];
-      $('#chMeta').textContent=[
-        `Score ${r.smart_score!=null?r.smart_score:'—'}`, r.consensus||'—',
-        `best target ${h.best_target!=null?'$'+h.best_target.toFixed(2):'—'} (${pct(r.best_upside)})`,
-        `consensus ${h.cons_target!=null?'$'+h.cons_target.toFixed(2):'—'} (${pct(r.upside)})`,
-        `3-mo ${pct(r.tr_3m)}`, `vol ${fmt(r.vol_ann,0)}%`
-      ].join(' · ');
+      const stat=(l,v)=>v==null?'':`<span class="stat"><span class="sl">${l}</span><span class="sv">${v}</span></span>`;
+      const ssb=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
+      $('#chMeta').innerHTML='<div class="stat-strip">'
+        +stat('Smart Score',ssb)
+        +stat('Consensus',`<span class="chip ${chipCls(r.consensus)}">${r.consensus||'—'}</span>`)
+        +stat('Best analysts',`<span class="chip ${chipCls(r.best_consensus)}">${r.best_consensus||'—'}</span>`)
+        +stat('Best target',h.best_target!=null?`$${h.best_target.toFixed(2)} <span class="${(r.best_upside||0)>=0?'pos':'neg'}">(${pct(r.best_upside)})</span>`:'—')
+        +stat('Consensus target',h.cons_target!=null?`$${h.cons_target.toFixed(2)} <span class="${(r.upside||0)>=0?'pos':'neg'}">(${pct(r.upside)})</span>`:'—')
+        +stat('3-mo TR',`<span class="${(r.tr_3m||0)>=0?'pos':'neg'}">${pct(r.tr_3m)}</span>`)
+        +stat('Vol (ann.)',r.vol_ann!=null?fmt(r.vol_ann,0)+'%':'—')
+        +stat('Yield',r.div_yield!=null?fmt(r.div_yield,2)+'%':null)
+        +stat('Cap',`$${fmt(r.mktcap_b,1)}B`)
+        +'</div>';
       const trc=[
         {type:'scatter',mode:'lines',name:r.ticker,x:h.dates,y:h.close,line:{color:tok('--t1'),width:1.8},hovertemplate:'$%{y:.2f}<extra>'+r.ticker+'</extra>'},
         {type:'scatter',mode:'lines',name:'50d',x:h.dates,y:h.ma50,line:{color:tok('--b'),width:1},hovertemplate:'$%{y:.2f}<extra>50d</extra>'},
@@ -581,9 +600,9 @@ function whyProfile(r){
   if(/negative/i.test(r.investor||''))warn.push(`individual-investor sentiment ${r.investor}`);
   if(r.bvc_gap!=null&&Math.abs(r.bvc_gap)>=10)warn.push(`best-vs-consensus gap ${(r.bvc_gap>=0?'+':'')+r.bvc_gap.toFixed(1)}% — analyst disagreement, when targets are least reliable`);
   if(!r.lens_pass)warn.push('fails the trap lens');
-  return `<b>Screen profile</b> — mechanical, from this week's fields, not a thesis: ${good.length?good.join('; '):'nothing stands out'}.`
-    +(warn.length?` <b>Caveats:</b> ${warn.join('; ')}.`:'')
-    +' Analyst-implied and ungraded.';
+  const gl=`<div class="wp-line"><span class="wp-good">✓ Screens well on:</span>${good.length?good.join(' · '):'nothing stands out this week'}</div>`;
+  const wl=warn.length?`<div class="wp-line"><span class="wp-warn">⚠ Caveats:</span>${warn.join(' · ')}</div>`:'';
+  return gl+wl+'<div class="wp-tail">Screen profile — mechanical, from this week\'s fields; analyst-implied, ungraded, not a thesis.</div>';
 }
 function renderTable(){
   const th=COLS.map(c=>`<th class="${c[2]==='l'?'l':''}" data-k="${c[0]}" title="${c[3]||''}">${c[1]}${sortKey===c[0]?(sortDir<0?' ▾':' ▴'):''}</th>`).join('');
