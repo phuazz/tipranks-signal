@@ -529,7 +529,7 @@ function renderPrice(r,h){
         mkT(h.cons_target,'cons $'+h.cons_target.toFixed(0),tok('--t3'));
       ann.push({xref:'paper',x:1,y:last,xanchor:'left',xshift:4,text:'now $'+last.toFixed(0),font:{size:9,family:'JetBrains Mono',color:'#fff'},bgcolor:tok('--t1'),borderpad:2,showarrow:false});
       const L={paper_bgcolor:'transparent',plot_bgcolor:'#fafaf8',
-        font:{family:'DM Sans',size:10,color:tok('--t2')},margin:{t:34,b:10,l:10,r:78},
+        font:{family:'DM Sans',size:10,color:tok('--t2')},margin:{t:34,b:10,l:10,r:tgtOverlap?118:78},
         xaxis:{gridcolor:'#eeeee8',linecolor:'#d5d3ca',linewidth:1,showgrid:false,tickformat:"%b '%y",dtick:'M2',tickfont:{size:9},
           rangeselector:{buttons:[{count:3,label:'3M',step:'month',stepmode:'backward'},{count:6,label:'6M',step:'month',stepmode:'backward'},{step:'all',label:'1Y'}],font:{size:9},bgcolor:tok('--bg3'),activecolor:tok('--bg4'),bordercolor:tok('--bd'),borderwidth:1,x:1,xanchor:'right',y:1.13}},
         yaxis:{gridcolor:'#f0f0ea',linecolor:'#d5d3ca',linewidth:1,showgrid:true,gridwidth:1,side:'right',tickfont:{size:9,family:'JetBrains Mono'},tickprefix:'$',range:[ymin*0.96,ymax*1.04]},
