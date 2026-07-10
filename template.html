@@ -56,7 +56,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.
 .pane{display:none} .pane.active{display:block}
 
 /* kpi strip */
-.kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:20px}
+.kpi-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:20px}
 .kpi{background:var(--bg2);padding:14px 16px}
 .kpi-lab{font-size:10px;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;color:var(--t3);margin-bottom:6px}
 .kpi-val{font-family:var(--mono);font-size:23px;font-weight:700;letter-spacing:-0.5px}
@@ -87,6 +87,16 @@ tbody tr:hover td:first-child{background:var(--bg-hover)}
 .chipbtn.on{background:var(--t1);color:var(--bg2);border-color:var(--t1)}
 .kpi.click{cursor:pointer}
 .kpi.click:hover{background:var(--bg-hover)}
+/* scoreboards */
+.sb-row{display:flex;gap:9px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--bg4);cursor:pointer;font-size:12px}
+.sb-row:last-child{border-bottom:none}
+.sb-row:hover{background:var(--bg-hover)}
+.sb-tk{font-family:var(--mono);font-weight:700;flex:0 0 52px}
+.sb-bar-wrap{flex:0 0 70px;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.sb-bar{display:block;height:100%;border-radius:3px}
+.sb-val{font-family:var(--mono);font-weight:700;flex:0 0 48px;text-align:right}
+.sb-ctx{color:var(--t3);font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-stale{color:var(--r);font-weight:600}
 tbody td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
 tbody td.l{text-align:left;font-family:var(--sans)}
 tbody tr:hover{background:var(--bg-hover)}
@@ -160,6 +170,10 @@ tbody tr{cursor:pointer}
   <!-- PANEL STATE -->
   <div class="pane active" id="pane-panel">
     <div class="kpi-strip" id="kpis"></div>
+    <div class="grid">
+      <div class="card"><h3>Board leaders — top 5 by upside ÷ vol</h3><div class="cap">Lens-passed names on the ex-ante Sharpe-like scale · bar length = magnitude, bar colour = Smart Score · click a row for its chart.</div><div id="sbLead"></div></div>
+      <div class="card"><h3>Freshest strong names — top 5 by rating recency</h3><div class="cap">Newest analyst action among lens-passed names with above-median upside ÷ vol — the closest proxy to the revision signal until snapshot 2 · click a row for its chart.</div><div id="sbFresh"></div></div>
+    </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Sector leaders — who looks attractive, and by how much</h3>
       <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score (red 1 → green 10) · the top three per sector are labelled · sectors ordered by their best name, lens-passed count in brackets. Hover for the analyst detail; click any dot for its price chart.</div>
@@ -168,7 +182,7 @@ tbody tr{cursor:pointer}
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Liquid universe — the panel</h3>
-      <div class="cap"><b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — combined with proprietary weights; 10 is most bullish, and the table sorts on it by default. <b>Hide trap profiles</b> removes names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — a view-only guard, ungraded. Details on the Literature tab.</div>
+      <div class="cap"><b>Default order = Sector rank</b>, the sector-relative percentile of upside ÷ vol — implied upside predicts <em>within</em> sector, not across the market (Da &amp; Schaumburg) — with fresher ratings first on ties; from snapshot 2 the default becomes "revised this week first". <b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — proprietary weights, 10 most bullish; a column and a filter here, not the order, because levels are the weakest evidence layer. <b>Hide trap profiles</b> removes names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — view-only, ungraded. Details on the Literature tab.</div>
       <div class="tbl-tools">
         <input id="filter" placeholder="Filter ticker / company / sector…">
         <span class="hint" id="tblHint">—</span>
@@ -340,32 +354,35 @@ function ssColor(v){
 }
 const bucket = k => /positive|bullish/i.test(k)?'pos':(/negative|bearish/i.test(k)?'neg':'neu');
 
-// day gap between a rating date and the capture date via the Date library (no manual offsets)
+// day gap between a rating date and the capture date via the Date library (no manual offsets); memoised for the sort path
+const DG_CACHE={};
 function dayGap(dstr){
   if(!dstr)return null;
+  if(dstr in DG_CACHE)return DG_CACHE[dstr];
   const t=Date.parse(dstr), a=Date.parse(D.as_of);
-  if(isNaN(t)||isNaN(a))return null;
-  return Math.round((a-t)/86400000);
+  const v=(isNaN(t)||isNaN(a))?null:Math.round((a-t)/86400000);
+  DG_CACHE[dstr]=v; return v;
 }
 function kpis(){
   const u=D.universe, k=D.kpis, T=D.table;
   const pass=T.filter(r=>r.lens_pass);
   const uv=pass.filter(r=>r.upside_per_vol!=null).sort((a,b)=>b.upside_per_vol-a.upside_per_vol);
-  const lead=uv[0]||null;
-  const medUV=uv.length?uv[Math.floor(uv.length/2)].upside_per_vol:null;
-  const fresh=uv.filter(r=>r.upside_per_vol>=medUV&&dayGap(r.last_rating)!=null)
-    .sort((a,b)=>dayGap(a.last_rating)-dayGap(b.last_rating))[0]||null;
-  const rows=[
-    ['Liquid universe', k.n_liquid, `${u.sp500} S&P 500 · ${u.sp400} MidCap 400 · matched ${u.matched}/${u.snapshot_total} of the export`, null],
-    ['Panel skew — why we rank', k.pct_buy+'% buy', `median upside ${pct(k.median_upside)} · levels do not differentiate — rank within sector`, null],
-    ['Pass the trap lens', `${pass.length} of ${k.n_liquid}`, 'price / insider / score gate — view-only, ungraded', null]
-  ];
-  if(lead)rows.push(['Board leader — upside ÷ vol', `${lead.ticker} ${lead.upside_per_vol.toFixed(2)}`,
-    `${pct(lead.best_upside)} on ${fmt(lead.vol_ann,0)}% vol · rated ${dayGap(lead.last_rating)!=null?dayGap(lead.last_rating)+'d ago':'—'} · click for chart`, lead.ticker]);
-  if(fresh)rows.push(['Freshest strong name', `${fresh.ticker} · ${dayGap(fresh.last_rating)}d`,
-    `newest rating among above-median upside ÷ vol (${fresh.upside_per_vol.toFixed(2)}) · click for chart`, fresh.ticker]);
-  $('#kpis').innerHTML = rows.map(r=>`<div class="kpi${r[3]?' click':''}"${r[3]?` data-t="${r[3]}"`:''}><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
-  document.querySelectorAll('#kpis .kpi.click').forEach(el=>el.addEventListener('click',()=>openChart(el.dataset.t)));
+  const medUV=uv.length?uv[Math.floor(uv.length/2)].upside_per_vol:0;
+  const fresh=uv.filter(r=>dayGap(r.last_rating)!=null&&r.upside_per_vol>=medUV)
+    .sort((a,b)=>dayGap(a.last_rating)-dayGap(b.last_rating)||b.upside_per_vol-a.upside_per_vol);
+  $('#kpis').innerHTML = [
+    ['Liquid universe', k.n_liquid, `${u.sp500} S&P 500 · ${u.sp400} MidCap 400 · matched ${u.matched}/${u.snapshot_total} of the export`],
+    ['Panel skew — why we rank', k.pct_buy+'% buy', `median upside ${pct(k.median_upside)} · levels do not differentiate — rank within sector`],
+    ['Pass the trap lens', `${pass.length} of ${k.n_liquid}`, 'price / insider / score gate — view-only, ungraded']
+  ].map(r=>`<div class="kpi"><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
+  const maxUV=uv.length?uv[0].upside_per_vol:1;
+  const row=(r,val,ctx)=>{const w=Math.max(4,Math.round(100*(r.upside_per_vol||0)/maxUV));
+    return `<div class="sb-row" data-t="${r.ticker}"><span class="sb-tk">${r.ticker}</span><span class="sb-bar-wrap"><span class="sb-bar" style="width:${w}%;background:${ssColor(r.smart_score!=null?r.smart_score:5)}"></span></span><span class="sb-val">${val}</span><span class="sb-ctx">${ctx}</span></div>`;};
+  $('#sbLead').innerHTML=uv.slice(0,5).map(r=>{const d=dayGap(r.last_rating);
+    return row(r,r.upside_per_vol.toFixed(2),`${pct(r.best_upside)} on ${fmt(r.vol_ann,0)}% vol · ${r.sector||''} · rated ${d!=null?d+'d ago':'—'}${d!=null&&d>30?' <span class="sb-stale">⚠ stale</span>':''}`);}).join('')||'—';
+  $('#sbFresh').innerHTML=fresh.slice(0,5).map(r=>{const d=dayGap(r.last_rating);
+    return row(r,d+'d',`u÷v ${r.upside_per_vol.toFixed(2)} · Smart Score ${r.smart_score!=null?r.smart_score:'—'} · ${r.sector||''}`);}).join('')||'—';
+  document.querySelectorAll('.sb-row').forEach(el=>el.addEventListener('click',()=>openChart(el.dataset.t)));
 }
 
 function chartSS(){
@@ -519,7 +536,7 @@ const COLS=[
   ['div_yield','Yld %','r','Trailing dividend yield, % (style control, not a signal)'],
   ['mktcap_b','Cap $B','r','Market capitalisation, USD billions']
 ];
-let sortKey='smart_score', sortDir=-1;
+let sortKey='sector_pct', sortDir=-1;
 function chipCls(v){return v==='Strong Buy'?'chip-sb':v==='Moderate Buy'?'chip-mb':v==='Hold'?'chip-h':v?'chip-s':''}
 
 const SEL={sectors:new Set(), minScore:0, idx:new Set(), lens:true};
@@ -583,6 +600,9 @@ function renderTable(){
   rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];if(x==null)return 1;if(y==null)return -1;
     const p=(typeof x==='number'?x-y:(''+x).localeCompare(''+y))*sortDir;
     if(p)return p;
+    const da=dayGap(a.last_rating),db=dayGap(b.last_rating);
+    if(da!=null&&db!=null&&da!==db)return da-db;
+    if((da==null)!==(db==null))return da==null?1:-1;
     const ux=a.upside_per_vol,uy=b.upside_per_vol;
     return uy==null?-1:ux==null?1:uy-ux;});
   $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${lensHidden} trap-profile hidden`:'');
