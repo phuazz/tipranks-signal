@@ -152,7 +152,7 @@ tbody tr{cursor:pointer}
     <div class="kpi-strip" id="kpis"></div>
     <div class="card" style="margin-bottom:16px">
       <h3>Sector leaders — who looks attractive, and by how much</h3>
-      <div class="cap"><b>Position</b> = best-analyst upside per unit of volatility, the magnitude of ex-ante attractiveness (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score (red 1 → green 10) · the top three per sector are labelled · sectors ordered by their best name, lens-passed count in brackets. Click any dot for its price chart.</div>
+      <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score (red 1 → green 10) · the top three per sector are labelled · sectors ordered by their best name, lens-passed count in brackets. Hover for the analyst detail; click any dot for its price chart.</div>
       <div class="note" style="margin:6px 0 10px;font-size:11.5px"><b>Caveats from the literature (details on the Literature tab):</b> analysts realise roughly 16–18 cents per dollar of claimed upside — read position as direction, not forecast. A far-right dot that got there through a recent price fall is usually a <em>stale target mean-reverting down to price</em>, not conviction; the trap gate removes the worst, and the chart click is the check for the rest. Implied upside compares reliably <b>within a row</b> — cross-sector comparison stands on weaker evidence (Da &amp; Schaumburg). Analyst-implied and ungraded throughout.</div>
       <div id="cLeaders" class="chart" style="height:470px"></div>
     </div>
@@ -305,7 +305,7 @@ const CAT = () => ({
   xaxis:{linecolor:tok('--bd2'), showgrid:false, tickfont:{size:10}, fixedrange:true},
   yaxis:{gridcolor:tok('--bg-hover'), zeroline:false, tickfont:{size:10, family:'JetBrains Mono'}, fixedrange:true},
   showlegend:false, bargap:0.28,
-  hoverlabel:{bgcolor:'#fff', bordercolor:tok('--bd2'), font:{size:11, family:'DM Sans'}}
+  hoverlabel:{bgcolor:'#fff', bordercolor:tok('--bd2'), font:{size:11, family:'DM Sans', color:tok('--t1')}}
 });
 const CFG = {displayModeBar:false, responsive:true};
 
@@ -377,7 +377,11 @@ function chartLeaders(){
   const xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs), span=(xmax-xmin)||1;
   const med=[...xs].sort((a,b)=>a-b)[Math.floor(xs.length/2)];
   const dotSize=c=>Math.max(6,Math.min(17,6+3.2*Math.log10(Math.max(c||1,1)/2)));   // $B, log scale
-  const hov=r=>`<b>${r.ticker}</b> ${r.company||''}<br>best upside ${pct(r.best_upside)} on vol ${fmt(r.vol_ann,0)}% → ${r.upside_per_vol.toFixed(2)}<br>3-mo ${pct(r.tr_3m)} · Score ${r.smart_score!=null?r.smart_score:'—'} · $${fmt(r.mktcap_b,1)}B cap · sector rank ${r.sector_pct!=null?r.sector_pct:'—'}`;
+  const hov=r=>{
+    const who=[r.most_accurate?`most accurate: ${r.most_accurate}`:null,
+               r.most_profitable?`most profitable: ${r.most_profitable}`:null].filter(Boolean).join(' · ');
+    return `<b>${r.ticker}</b> ${r.company||''}<br>best upside ${pct(r.best_upside)} on vol ${fmt(r.vol_ann,0)}% → ${r.upside_per_vol.toFixed(2)}<br>3-mo ${pct(r.tr_3m)} · Score ${r.smart_score!=null?r.smart_score:'—'} · $${fmt(r.mktcap_b,1)}B cap · sector rank ${r.sector_pct!=null?r.sector_pct:'—'}<br>best analysts: ${r.best_consensus||'—'} · last rating ${r.last_rating||'—'}`+(who?`<br>${who}`:'')+`<br><i>click for price chart ↗</i>`;
+  };
   const base={type:'scatter',mode:'markers',x:[],y:[],text:[],hovertemplate:'%{text}<extra></extra>',cliponaxis:false,marker:{size:[],opacity:0.45,color:[]},customdata:[]};
   const top={type:'scatter',mode:'markers+text',x:[],y:[],text:[],hovertext:[],hovertemplate:'%{hovertext}<extra></extra>',cliponaxis:false,textposition:[],textfont:{family:'JetBrains Mono',size:10,color:tok('--t1')},marker:{size:[],opacity:1,color:[],line:{width:1.4,color:'#fff'}},customdata:[]};
   const TPOS=['middle right','top right','bottom right'];   // staggered anchors so near-equal leaders do not collide
@@ -395,7 +399,7 @@ function chartLeaders(){
   const L=Object.assign(CAT(),{
     height:470,hovermode:'closest',showlegend:false,
     margin:{t:20,b:42,l:172,r:36},
-    xaxis:{title:{text:'best-analyst upside ÷ annualised volatility (0 = no implied upside)',font:{size:10}},
+    xaxis:{title:{text:'best-analyst implied ~12-month return ÷ annualised volatility — an ex-ante, unhaircut Sharpe-like scale (0 = no implied upside)',font:{size:10}},
       range:[xmin-0.07*span,xmax+0.17*span],
       gridcolor:tok('--bg-hover'),zeroline:true,zerolinecolor:tok('--bd-strong'),zerolinewidth:1,
       linecolor:tok('--bd2'),showgrid:true,tickfont:{size:10,family:'JetBrains Mono'},fixedrange:true},
@@ -405,6 +409,7 @@ function chartLeaders(){
   });
   Plotly.newPlot('cLeaders',[base,top],L,CFG).then(gd=>{
     gd.on('plotly_click',ev=>{const p=ev.points&&ev.points[0];if(p&&p.customdata)openChart(p.customdata);});
+    const drag=gd.querySelector('.nsewdrag'); if(drag)drag.style.cursor='pointer';
   });
 }
 
@@ -447,7 +452,7 @@ function openChart(t){
           rangeselector:{buttons:[{count:3,label:'3M',step:'month',stepmode:'backward'},{count:6,label:'6M',step:'month',stepmode:'backward'},{step:'all',label:'1Y'}],font:{size:9},bgcolor:tok('--bg3'),activecolor:tok('--bg4'),bordercolor:tok('--bd'),borderwidth:1,x:1,xanchor:'right',y:1.13}},
         yaxis:{gridcolor:'#f0f0ea',linecolor:'#d5d3ca',linewidth:1,showgrid:true,gridwidth:1,side:'right',tickfont:{size:9,family:'JetBrains Mono'},tickprefix:'$',range:[ymin*0.96,ymax*1.04]},
         showlegend:true,legend:{x:0,y:1.09,orientation:'h',font:{size:9},bgcolor:'transparent'},
-        hovermode:'x unified',hoverlabel:{bgcolor:'#fff',bordercolor:'#d5d3ca',font:{size:10,family:'DM Sans'}},
+        hovermode:'x unified',hoverlabel:{bgcolor:'#fff',bordercolor:'#d5d3ca',font:{size:10,family:'DM Sans',color:'#1a1a18'}},
         shapes:shp,annotations:ann};
       Plotly.newPlot('cPrice',trc,L,CFG);
     })

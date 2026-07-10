@@ -101,6 +101,9 @@ def main() -> int:
         "div_yield": r.get("dividend_yield"),
         "mktcap_b": round((r.get("market_cap") or 0) / 1e9, 1),
         "idx": "500" if "S&P 500" in r.get("member_of", []) else "400",
+        "most_accurate": r.get("most_accurate_analyst"),
+        "most_profitable": r.get("most_profitable_analyst"),
+        "last_rating": r.get("last_rating_date"),
     } for r in liquid]
 
     # --- view-layer lens (ungraded; mirrors the frozen S3 gate inputs) ---------
