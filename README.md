@@ -6,7 +6,7 @@ Forward-tested study of **TipRanks analyst signals** as cross-sectional predicto
 
 ## Status
 
-First snapshot captured 2026-07-09 (1,987 names; Mid+Large+Mega, US primary). Ingest and the Norgate merge run on live data; the forward-return analysis is pre-registered but **not yet runnable** (it needs weekly snapshots to accrue). See `RESEARCH_MEMO.md`.
+First snapshot captured 2026-07-09 (1,987 names; Mid+Large+Mega, US primary). Ingest and the Norgate merge run on live data; the forward-return analysis is pre-registered but **not yet runnable** (it needs weekly snapshots to accrue). The scoring & selection framework was **frozen 2026-07-10** — five graded schemes, shared construction conventions, KEEP bar and graduation rule (`RESEARCH_MEMO.md`, register rows 3–5); `analyse.py` implements it in a later, mechanical session. See `RESEARCH_MEMO.md`.
 
 ## Why this shape
 
@@ -50,4 +50,4 @@ Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sec
 - Schema confirmed 2026-07-09 (26-column CSV; `COLUMN_MAP` locked). The two unmapped columns (Volume, Avg. Volume (3M)) are skipped by design — Norgate supplies liquidity.
 - Ticker → Norgate symbol resolution is best-effort (class shares); the merge **flags** misses rather than dropping them — review the unmatched list on the first merge.
 
-_Last updated: 2026-07-09._
+_Last updated: 2026-07-10._
