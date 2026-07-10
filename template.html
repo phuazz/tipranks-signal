@@ -330,7 +330,7 @@ tbody tr{cursor:pointer}
     <div class="cap" id="chMeta" style="margin-bottom:6px">—</div>
     <div class="cap" id="chWhy" style="margin-bottom:8px;line-height:1.55">—</div>
     <div id="cPrice" style="height:390px"></div>
-    <div class="cap" style="margin-top:8px">Total-return series (dividends reinvested) — the latest point equals the actual price; earlier history is adjusted. Dotted lines are analyst targets: implied, not validated. 50d / 200d are session moving averages.</div>
+    <div class="cap" style="margin-top:8px">Total-return series (dividends reinvested) — the latest point equals the actual price; earlier history is adjusted. Dotted lines are analyst targets (best-analyst green, consensus grey; a single "best ≈ cons" line means the two sit within 1% of price of each other): implied, not validated. 50d / 200d are session moving averages.</div>
   </div>
 </div>
 
@@ -523,8 +523,9 @@ function renderPrice(r,h){
       const mkT=(v,lab,col)=>{if(v==null)return;ymax=Math.max(ymax,v);ymin=Math.min(ymin,v);
         shp.push({type:'line',xref:'paper',x0:0,x1:1,y0:v,y1:v,line:{color:col,width:1,dash:'dot'}});
         ann.push({xref:'paper',x:1,y:v,xanchor:'left',xshift:4,text:lab,font:{size:9,family:'JetBrains Mono',color:'#fff'},bgcolor:col,borderpad:2,showarrow:false});};
-      mkT(h.best_target,'best $'+(h.best_target!=null?h.best_target.toFixed(0):''),tok('--g'));
-      if(h.cons_target!=null&&(h.best_target==null||Math.abs(h.cons_target-h.best_target)>0.01*last))
+      const tgtOverlap=h.best_target!=null&&h.cons_target!=null&&Math.abs(h.cons_target-h.best_target)<=0.01*last;
+      mkT(h.best_target,(tgtOverlap?'best ≈ cons $':'best $')+(h.best_target!=null?h.best_target.toFixed(0):''),tok('--g'));
+      if(h.cons_target!=null&&(h.best_target==null||!tgtOverlap))
         mkT(h.cons_target,'cons $'+h.cons_target.toFixed(0),tok('--t3'));
       ann.push({xref:'paper',x:1,y:last,xanchor:'left',xshift:4,text:'now $'+last.toFixed(0),font:{size:9,family:'JetBrains Mono',color:'#fff'},bgcolor:tok('--t1'),borderpad:2,showarrow:false});
       const L={paper_bgcolor:'transparent',plot_bgcolor:'#fafaf8',
@@ -616,8 +617,10 @@ function renderTable(){
   if(SEL.sectors.size) rows=rows.filter(r=>SEL.sectors.has(r.sector));
   if(SEL.minScore) rows=rows.filter(r=>r.smart_score!=null&&r.smart_score>=SEL.minScore);
   if(SEL.idx.size) rows=rows.filter(r=>SEL.idx.has(r.idx));
-  rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];if(x==null)return 1;if(y==null)return -1;
-    const p=(typeof x==='number'?x-y:(''+x).localeCompare(''+y))*sortDir;
+  rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];
+    if(x==null&&y!=null)return 1;
+    if(y==null&&x!=null)return -1;
+    const p=(x==null&&y==null)?0:(typeof x==='number'?x-y:(''+x).localeCompare(''+y))*sortDir;
     if(p)return p;
     const da=dayGap(a.last_rating),db=dayGap(b.last_rating);
     if(da!=null&&db!=null&&da!==db)return da-db;
