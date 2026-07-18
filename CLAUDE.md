@@ -10,7 +10,7 @@ A forward-tested study of TipRanks analyst signals (rating changes, best-analyst
 
 - TipRanks (Ultimate) and Norgate (Platinum) are BOTH personal-use licences. No API entitlement on either; data arrives by manual weekly Excel export (TipRanks) and the local NDU proxy (Norgate).
 - Vendor VALUES never enter version control. `data/` is gitignored in full: raw `.xlsx` exports are archived to OneDrive, and the derived snapshots / merges / caches stay local-only. Verify with `git check-ignore -v data/` before committing anything.
-- If this project is ever given a git remote it MUST be private. Only code, docs, and OUR own aggregate derived numbers (alphas, hit rates — never per-name TipRanks values) may ever be published.
+- Remote visibility: **PUBLIC since 2026-07-18 by owner decision** (this amends the earlier must-be-private rule; the full history was scanned before the flip — code, docs and aggregate numbers only, `data/` never tracked). The publication boundary is unchanged and absolute: only code, docs, and OUR own aggregate derived numbers (alphas, hit rates — never per-name TipRanks or Norgate values) are ever committed. `data/` stays gitignored in full; dashboard data files and monitor HTML exports are never committed or hosted. The local pre-commit hook blocking `data/`, `*.csv`, `*.xlsx` and monitor exports is mandatory — recreate it on any fresh clone with `python scripts/install_hooks.py`.
 - TipRanks numbers are leads, not facts: every signal is re-tested on our own Norgate return data before it informs anything. Human-in-the-loop; nothing auto-trades.
 
 ## The three ways this study could be silently wrong (state before building analysis)
@@ -33,4 +33,4 @@ python scripts/merge_norgate.py --asof YYYY-MM-DD
 # analyse.py runs only once forward bars accrue (pre-registered — see RESEARCH_MEMO.md)
 ```
 
-Its own git repo if remoted (PRIVATE). Separate approvals for commit and push per vault. British/Singapore English, no contractions in code, comments, and commits.
+Its own git repo, remoted PUBLIC since 2026-07-18 (see the IP firewall section — the data boundary is unchanged). Separate approvals for commit and push per vault. British/Singapore English, no contractions in code, comments, and commits.

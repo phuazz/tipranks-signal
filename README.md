@@ -10,7 +10,7 @@ First snapshot captured 2026-07-09 (1,987 names; Mid+Large+Mega, US primary). In
 
 Second snapshot filed 2026-07-18 (1,993 exported → 900 liquid; GTLS delisted in-window — its final return realises at analyse time, delisting-aware by design). The **Revision Monitor is live**: confirmed week-on-week upgrades / downgrades, best-analyst target revisions (identity-switch caveat disclosed), Smart-Score deltas and sector revision breadth; the panel's default order is now the week-on-week revision score.
 
-Remote: **private** repo at `github.com/phuazz/tipranks-signal` (code and docs only — `data/` is gitignored in full and never pushed, per the IP firewall).
+Remote: **public** repo at `github.com/phuazz/tipranks-signal` (made public 2026-07-18 by owner decision, after a full-history scan). What is public here is code, docs and OUR aggregate derived numbers only — per-name TipRanks / Norgate values never enter version control (`data/` is gitignored in full), the dashboard runs local-only, and its data files and HTML exports are never committed or hosted. A mandatory local pre-commit hook blocks `data/`, `*.csv`, `*.xlsx` and monitor exports outright; on a fresh clone, install it with `python scripts/install_hooks.py`.
 
 ## Why this shape
 
