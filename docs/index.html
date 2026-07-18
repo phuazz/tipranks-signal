@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TipRanks Signal — public research layer</title>
+<meta name="description" content="A forward-tested study of analyst signals on a point-in-time liquid US universe — aggregate panel state, revision flow, and the pre-registered framework. No per-name vendor data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+:root {
+  /* surfaces */
+  --bg: #fafaf8;        /* page background — warm off-white */
+  --bg2: #ffffff;       /* cards, raised surfaces */
+  --bg3: #f5f5f0;       /* table headers, inset chips */
+  --bg4: #eeeee8;       /* progress tracks, deep insets */
+  --bg-hover: #f0f0ea;  /* row / cell hover */
+  /* borders */
+  --bd: #e2e0d8;        /* default hairline */
+  --bd2: #d5d3ca;       /* medium */
+  --bd-strong: #c0beb5; /* emphasis / axis lines */
+  /* text */
+  --t1: #1a1a18;        /* primary — near-black */
+  --t2: #5c5c56;        /* secondary */
+  --t3: #8a8a82;        /* tertiary / labels */
+  --t4: #b0b0a8;        /* disabled / faint */
+  /* semantic: green = gain/long, red = loss/short */
+  --g: #1a8754;  --g2: #22a366;  --g-bg: rgba(26,135,84,0.07);  --g-bg2: rgba(26,135,84,0.14);
+  --r: #c0392b;  --r2: #e74c3c;  --r-bg: rgba(192,57,43,0.07);  --r-bg2: rgba(192,57,43,0.14);
+  /* accents: blue = neutral/benchmark, amber = caution, purple = cost, cyan = info, pink = alt */
+  --b: #2563eb;  --b2: #3b82f6;  --b-bg: rgba(37,99,235,0.06);  --b-bg2: rgba(37,99,235,0.12);
+  --a: #b45309;  --a-bg: rgba(180,83,9,0.07);
+  --p: #7c3aed;  --p-bg: rgba(124,58,237,0.06);
+  --c: #0891b2;  --c-bg: rgba(8,145,178,0.06);
+  --pk: #be185d; --pk-bg: rgba(190,24,93,0.06);
+  --g-text: #146c43;  --r-text: #a93226;  --b-text: #1d4ed8;  --a-text: #92400e;
+  --p-text: #7c3aed;  --c-text: #0e7490;  --pk-text: #be185d;
+  --t3-text: #66665e;
+  /* type */
+  --serif: 'Instrument Serif', Georgia, serif;
+  --sans: 'DM Sans', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+  /* elevation */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.04);
+  /* radius */
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.shell{max-width:1160px;margin:0 auto;padding:0 24px 40px}
+a{color:var(--b-text);text-decoration:none} a:hover{text-decoration:underline}
+
+.masthead{padding:28px 0 22px;border-bottom:2px solid var(--t1);display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px}
+.masthead h1{font-family:var(--serif);font-size:32px;font-weight:400;letter-spacing:-0.5px;line-height:1.05}
+.masthead h1 em{font-style:italic;color:var(--t3)}
+.masthead .sub{font-size:13px;color:var(--t2);margin-top:6px;max-width:680px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:0.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--bd2);background:var(--bg2);color:var(--t2)}
+.pill-g{background:var(--g-bg2);border-color:var(--g);color:var(--g-text)}
+
+.note{background:var(--a-bg);border:1px solid var(--bd);border-left:3px solid var(--a);border-radius:var(--radius);padding:12px 16px;font-size:12.5px;color:var(--t2);margin:18px 0}
+.note b{color:var(--t1)}
+
+.kpi-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--radius-lg);overflow:hidden;margin:18px 0 22px}
+.kpi{background:var(--bg2);padding:14px 16px}
+.kpi-lab{font-size:10px;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;color:var(--t3);margin-bottom:6px}
+.kpi-val{font-family:var(--mono);font-size:22px;font-weight:700;letter-spacing:-0.5px}
+.kpi-sub{font-size:11px;color:var(--t3-text);margin-top:2px}
+
+h2{font-family:var(--serif);font-size:24px;font-weight:400;margin:30px 0 6px}
+.sec-sub{font-size:12.5px;color:var(--t2);margin-bottom:14px;max-width:820px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+.card{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:16px 18px}
+.card h3{font-size:11px;text-transform:uppercase;letter-spacing:0.9px;font-weight:700;color:var(--t2);margin-bottom:4px}
+.card .cap{font-size:11.5px;color:var(--t3-text);margin-bottom:10px}
+.chart{width:100%;height:250px}
+.ss-legend{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--t3);font-family:var(--mono);vertical-align:middle}
+.ss-grad{display:inline-block;width:56px;height:6px;border-radius:3px;background:linear-gradient(90deg,#c0392b,#b45309,#1a8754)}
+
+.guard{border-left:3px solid var(--b)}
+.guard b{color:var(--t1)}
+.guard .cap{margin-bottom:0}
+.scheme li{padding:8px 0;border-bottom:1px solid var(--bg4);font-size:12.5px;color:var(--t2);line-height:1.55;list-style:none}
+.scheme li:last-child{border-bottom:none}
+.scheme .src{color:var(--t1);font-weight:600}
+.hook{display:inline-block;font-size:10px;font-weight:700;letter-spacing:0.3px;padding:1px 7px;border-radius:999px;background:var(--b-bg);color:var(--b-text);margin-left:6px;white-space:nowrap}
+
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+thead th{background:var(--bg3);text-align:right;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--bd2);white-space:nowrap}
+thead th.l{text-align:left}
+tbody td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
+tbody td.l{text-align:left;font-family:var(--sans)}
+tbody tr:hover{background:var(--bg-hover)}
+.pos{color:var(--g-text)} .neg{color:var(--r-text)}
+
+.progress{max-width:460px;margin:12px 0 4px}
+.ptrack{height:10px;background:var(--bg4);border-radius:999px;overflow:hidden;border:1px solid var(--bd)}
+.pfill{height:100%;background:var(--b);border-radius:999px}
+.pcap{font-size:11.5px;color:var(--t3-text);margin-top:7px;font-family:var(--mono)}
+.locked{border:1px dashed var(--bd2);background:var(--bg2)}
+
+.foot{margin-top:34px;font-size:11px;color:var(--t3-text);border-top:1px solid var(--bd);padding-top:14px;line-height:1.7}
+@media(max-width:900px){.grid,.grid3{grid-template-columns:1fr}.kpi-strip{grid-template-columns:repeat(2,1fr)}.masthead h1{font-size:26px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="masthead">
+    <div>
+      <h1>TipRanks Signal <em>— public research layer</em></h1>
+      <div class="sub">A forward-tested study of analyst signals — rating <b>revisions</b>, best-analyst targets, the Smart Score — over a point-in-time, survivorship-free liquid US universe (S&amp;P 500 + MidCap 400). This page shows <b>aggregates and methodology only</b>; per-name vendor data stays private.</div>
+    </div>
+    <div class="pills">
+      <span class="pill pill-g">AGGREGATES ONLY</span>
+      <span class="pill" id="pillDate">—</span>
+      <span class="pill"><a href="https://github.com/phuazz/tipranks-signal">github.com/phuazz/tipranks-signal</a></span>
+    </div>
+  </div>
+
+  <div class="note"><b>What this is — and is not.</b> A personal research project, published for methodological transparency. It is not investment advice, not a stock-picking service, and not affiliated with or endorsed by TipRanks or Norgate. Their per-name data is licensed for personal use and is <b>never published here</b> — only our own aggregate statistics and derived research results appear on this page. No signal shown here is validated until the pre-registered analysis completes.</div>
+
+  <div class="kpi-strip" id="kpis"></div>
+
+  <h2>The study, in brief</h2>
+  <div class="sec-sub">Each week the analyst panel is captured and <b>frozen</b> — never revised, never backfilled — and joined to a point-in-time index universe with delisted names retained. The design is pre-registered: universe, signals, adjustment, inference and the decision rule were fixed in writing before any result existed. The known failure modes have named guards:</div>
+  <div class="grid3">
+    <div class="card guard"><h3>Guard 1 — look-ahead</h3><div class="cap">Vendor sites show only current, recomputed scores and drop dead names. Forward snapshots only: each weekly panel is frozen at capture. History is accrued, never reconstructed.</div></div>
+    <div class="card guard"><h3>Guard 2 — fake alpha</h3><div class="cap">Bullish ratings cluster on high-beta growth, so raw forward returns flatter the signal. The headline is drift-adjusted, style-neutralised alpha — the adjustment that collapsed 14 apparent leads to 1 in a sibling study.</div></div>
+    <div class="card guard"><h3>Guard 3 — costs</h3><div class="cap">Revision signals churn. Liquidity floors (price and dollar-volume), tiered one-way costs on every rebalance, and a cost sweep — a gross-only result is a curiosity, not a finding.</div></div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <h3>The frozen menu — five schemes, and nothing else is ever graded</h3>
+    <ul class="scheme">
+      <li><span class="src">S1a — rating-change bucket (primary).</span> Week-on-week consensus-label improvements between frozen snapshots, counted only when the latest rating date falls inside the window — composition phantoms excluded. <span class="hook">revisions, not levels</span></li>
+      <li><span class="src">S1b — best-analyst target revisions.</span> The target <em>level</em> raised since the prior snapshot; upside moves caused purely by price do not qualify. <span class="hook">event bucket</span></li>
+      <li><span class="src">S1c — Smart-Score decile.</span> The vendor composite tested as-is, once — the vendor-claim test. <span class="hook">levels baseline</span></li>
+      <li><span class="src">S2 — residualised composite.</span> Equal-weight z-composite of the revision, target and insider axes, style-neutralised at construction; weights never optimised. <span class="hook">our reconstruction</span></li>
+      <li><span class="src">S3 — gated revision.</span> S1a AND price-not-falling AND no net insider selling — the value-trap gate as a scheme. <span class="hook">confirmation</span></li>
+    </ul>
+    <div class="cap" style="margin:8px 0 0">A signal is KEPT only if its style-neutral, drift-adjusted alpha survives net of tiered costs with a bootstrap CI excluding zero and a drift-matched random-entry null under BH-FDR (q = 0.10, N = 5), with sign stability across horizons. Verdicts are barred before 26 weekly captures; graduation additionally requires an economic-magnitude floor, a deflated Sharpe ratio, and a 13-week paper track. Ratchet, clock-start and no-promotion rules keep the multiple-testing budget honest.</div>
+  </div>
+
+  <h2>Panel state — the aggregate cross-section</h2>
+  <div class="sec-sub">Why the study ranks <em>changes</em> rather than reading levels: the panel is almost uniformly bullish, so levels barely differentiate. These are crowd statistics over the liquid universe — no name is attached to any value.</div>
+  <div class="grid">
+    <div class="card"><h3>Smart Score distribution</h3><div class="cap">Count of liquid names by the vendor's 1–10 composite <span class="ss-legend">1<span class="ss-grad"></span>10</span></div><div id="cSS" class="chart"></div></div>
+    <div class="card"><h3>Analyst consensus mix</h3><div class="cap">How lopsided the ratings are — the reason levels carry little cross-sectional information.</div><div id="cCons" class="chart"></div></div>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>By sector — coverage &amp; mean Smart Score</h3><div class="cap">Bar = number of liquid names; label = sector mean Smart Score.</div><div id="cSector" class="chart"></div></div>
+    <div class="card"><h3>Flow signals — share of names</h3><div class="cap">Insider / hedge-fund / individual-investor stance, bucketed positive · neutral · negative.</div><div id="cSent" class="chart"></div></div>
+  </div>
+
+  <h2>Revision flow — what changed this window</h2>
+  <div class="sec-sub" id="revSub">—</div>
+  <div class="kpi-strip" id="revKpis" style="grid-template-columns:repeat(5,1fr)"></div>
+  <div class="grid">
+    <div class="card"><h3>Sector revision breadth</h3><div class="cap">Net label upgrades (upgrades − downgrades) by sector; the annotation counts best-analyst target raises ↑ and cuts ↓. Flow, not levels, is the sector read worth watching.</div><div id="cBreadth" class="chart" style="height:300px"></div></div>
+    <div class="card"><h3>Week by week</h3><div class="cap">One aggregate row per weekly capture — the accruing public record of the panel.</div><div style="overflow-x:auto"><table id="wkTbl"><thead></thead><tbody></tbody></table></div></div>
+  </div>
+
+  <h2>Accrual &amp; findings</h2>
+  <div class="card locked">
+    <h3>Findings — pre-registered, locked until accrual</h3>
+    <div class="cap">The validated read — drift-adjusted alpha by scheme, net of costs — runs only once enough weekly captures carry matured forward windows. Interim reads carry no verdict; verdict eligibility starts at 26 captures. When results exist, this section carries them, aggregate-only, whatever they say — KEEP and DROP alike.</div>
+    <div class="progress"><div class="ptrack"><div class="pfill" id="accFill" style="width:0%"></div></div><div class="pcap" id="accCap">—</div></div>
+  </div>
+
+  <h2>Research map</h2>
+  <div class="sec-sub">The evidence the design leans on. Revisions beat levels; target upside is a biased level but a usable relative signal; corroboration and multiple-testing discipline do the rest.</div>
+  <div class="grid">
+    <div class="card"><h3>Revisions beat levels</h3>
+      <ul class="scheme">
+        <li><span class="src">Womack (1996), <em>Journal of Finance</em>.</span> Recommendation changes are followed by drift, asymmetrically — downgrade drift is larger and longer-lived.</li>
+        <li><span class="src">Barber, Lehavy, McNichols &amp; Trueman (2001), <em>JF</em>.</span> Consensus-level portfolios earn gross abnormal returns that transaction costs erase.</li>
+        <li><span class="src">Loh &amp; Stulz (2011), <em>RFS</em>.</span> Only ~12% of recommendation changes are influential — reputable analysts acting away from consensus.</li>
+      </ul>
+    </div>
+    <div class="card"><h3>Targets and discipline</h3>
+      <ul class="scheme">
+        <li><span class="src">Brav &amp; Lehavy (2003), <em>JF</em>.</span> Target-price revisions move prices — information events conditional on the rating.</li>
+        <li><span class="src">Da &amp; Schaumburg (2011), <em>JFM</em>.</span> Target-implied upside predicts within sector, not across the market.</li>
+        <li><span class="src">Dechow &amp; You (2020), <em>TAR</em>.</span> Roughly 16–18 cents per dollar of implied upside is realised — the optimism haircut.</li>
+        <li><span class="src">Harvey, Liu &amp; Zhu (2016), <em>RFS</em>; Bailey &amp; López de Prado (2014).</span> Multiple testing inflates discovery; FDR control and the deflated Sharpe ratio are the correction.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot" id="foot">
+    Aggregate statistics derived from licensed data (TipRanks Ultimate; Norgate Data Platinum) under personal-use terms — per-name vendor values are never published. Not investment advice; no recommendation is made or implied. Not affiliated with, sponsored by, or endorsed by TipRanks Ltd or Norgate Investor Services. Source and methodology: <a href="https://github.com/phuazz/tipranks-signal">github.com/phuazz/tipranks-signal</a>.
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (x,d=1)=> x==null?'—':(typeof x==='number'?x.toFixed(d):x);
+const pct = x => x==null?'—':(x>=0?'+':'')+x.toFixed(1)+'%';
+
+/* pipeline.py replaces the marker below with the aggregate JSON for docs/index.html;
+   the fetch fallback keeps the source template runnable via `npx serve .` */
+const AG_INLINE = /*__AGDATA__*/{"generated_utc":"2026-07-18T14:28:29+00:00","as_of":"2026-07-18","universe":{"liquid":900,"sp500":503,"sp400":397},"kpis":{"liquid":900,"pct_buy":80.0,"median_upside":13.26,"median_best_upside":13.44,"median_smart_score":7.0},"smart_score_hist":{"1":19,"2":36,"3":26,"4":67,"5":87,"6":134,"7":185,"8":145,"9":125,"10":76},"consensus":{"Strong Buy":322,"Moderate Buy":398,"Hold":160,"Moderate Sell":13,"Strong Sell":0},"by_sector":[{"sector":"Industrials","n":151,"mean_ss":6.79},{"sector":"Technology","n":141,"mean_ss":6.52},{"sector":"Financial","n":129,"mean_ss":7.12},{"sector":"Consumer Cyclical","n":113,"mean_ss":6.28},{"sector":"Healthcare","n":93,"mean_ss":6.55},{"sector":"Real Estate","n":62,"mean_ss":7.44},{"sector":"Consumer Defensive","n":48,"mean_ss":5.96},{"sector":"Utilities","n":45,"mean_ss":6.93},{"sector":"Basic Materials","n":41,"mean_ss":6.2},{"sector":"Energy","n":39,"mean_ss":7.49},{"sector":"Communication Services","n":30,"mean_ss":5.8},{"sector":"General","n":8,"mean_ss":6.88}],"sentiment":{"insider":{"Negative":422,"Positive":83,"Neutral":26},"hedgefund":{"Positive":342,"Neutral":82,"Negative":473},"investor":{"Positive":151,"Very Positive":476,"Neutral":63,"Negative":69,"Very Negative":112}},"accrual":{"snapshots":2,"min_snapshots":8,"matured":0},"revision":{"available":true,"prev_as_of":"2026-07-09","as_of":"2026-07-18","window_days":9,"pairs":899,"upgrades":20,"downgrades":27,"confirmed_up":19,"confirmed_down":26,"target_raises":365,"target_cuts":208,"target_raises_confirmed":344,"target_cuts_confirmed":191,"median_raise_pct":1.43,"median_cut_pct":-1.28,"entered_n":1,"left_n":2,"breadth":[{"sector":"Technology","net_upgrades":2,"raises":43,"cuts":25},{"sector":"Utilities","net_upgrades":2,"raises":28,"cuts":11},{"sector":"Healthcare","net_upgrades":1,"raises":38,"cuts":23},{"sector":"Basic Materials","net_upgrades":1,"raises":11,"cuts":18},{"sector":"Energy","net_upgrades":0,"raises":16,"cuts":17},{"sector":"General","net_upgrades":0,"raises":3,"cuts":3},{"sector":"Communication Services","net_upgrades":-1,"raises":10,"cuts":9},{"sector":"Consumer Defensive","net_upgrades":-1,"raises":9,"cuts":9},{"sector":"Industrials","net_upgrades":-1,"raises":66,"cuts":29},{"sector":"Financial","net_upgrades":-2,"raises":71,"cuts":25},{"sector":"Consumer Cyclical","net_upgrades":-3,"raises":53,"cuts":29},{"sector":"Real Estate","net_upgrades":-5,"raises":17,"cuts":10}]},"weekly":[{"as_of":"2026-07-09","liquid":901,"pct_buy":80.6,"median_upside":13.19,"median_best_upside":12.91,"median_smart_score":7.0},{"as_of":"2026-07-18","liquid":900,"pct_buy":80.0,"median_upside":13.26,"median_best_upside":13.44,"median_smart_score":7.0,"upgrades":20,"downgrades":27,"target_raises":365,"target_cuts":208}]};
+
+const CAT = () => ({
+  paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+  font:{family:'DM Sans', size:11, color:tok('--t2')},
+  margin:{t:8,b:34,l:40,r:10},
+  xaxis:{linecolor:tok('--bd2'), showgrid:false, tickfont:{size:11}, fixedrange:true},
+  yaxis:{gridcolor:tok('--bg-hover'), zeroline:false, tickfont:{size:11, family:'JetBrains Mono'}, fixedrange:true},
+  showlegend:false, bargap:0.28,
+  hoverlabel:{bgcolor:'#fff', bordercolor:tok('--bd2'), font:{size:11, family:'DM Sans', color:tok('--t1')}}
+});
+const CFG = {displayModeBar:false, responsive:true};
+function ssColor(v){
+  const t=Math.max(0,Math.min(1,(v-1)/9));
+  const stops=[[192,57,43],[180,83,9],[26,135,84]];
+  const seg=t<0.5?0:1, lt=t<0.5?t/0.5:(t-0.5)/0.5;
+  const a=stops[seg], b=stops[seg+1];
+  return `rgb(${Math.round(a[0]+(b[0]-a[0])*lt)},${Math.round(a[1]+(b[1]-a[1])*lt)},${Math.round(a[2]+(b[2]-a[2])*lt)})`;
+}
+
+function render(A){
+  $('#pillDate').textContent='as of '+A.as_of;
+  const k=A.kpis, u=A.universe, R=A.revision||{};
+  $('#kpis').innerHTML=[
+    ['Liquid universe', u.liquid, `${u.sp500} S&P 500 · ${u.sp400} MidCap 400 · point-in-time`],
+    ['Buy-rated', k.pct_buy+'%', 'Strong + Moderate Buy — why levels tell you little'],
+    ['Median implied upside', pct(k.median_upside), 'all-analyst consensus target vs price'],
+    ['Median Smart Score', fmt(k.median_smart_score,1), 'of 10 — the vendor composite'],
+    ['Weekly captures', `${A.accrual.snapshots} / ${A.accrual.min_snapshots}`, 'frozen forward panel, accruing'],
+    R.available?['Label changes (window)', `${R.upgrades}▲ · ${R.downgrades}▼`, `${R.confirmed_up+R.confirmed_down} of ${R.upgrades+R.downgrades} confirmed in-window`]:['Revision flow','—','from the second capture']
+  ].map(r=>`<div class="kpi"><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
+
+  const h=A.smart_score_hist, hx=Object.keys(h), hy=hx.map(x=>h[x]);
+  Plotly.newPlot('cSS',[{type:'bar',x:hx,y:hy,marker:{color:hx.map(v=>ssColor(+v))},
+    hovertemplate:'Smart Score %{x}: %{y} names<extra></extra>'}],CAT(),CFG);
+
+  const CONS_COL={'Strong Buy':tok('--g'),'Moderate Buy':tok('--g2'),'Hold':tok('--t3'),'Moderate Sell':tok('--r2'),'Strong Sell':tok('--r')};
+  const cy=Object.keys(A.consensus), cx=cy.map(kk=>A.consensus[kk]);
+  Plotly.newPlot('cCons',[{type:'bar',orientation:'h',y:cy,x:cx,
+    marker:{color:cy.map(kk=>CONS_COL[kk]||tok('--t3'))},
+    text:cx.map(v=>` ${v}`),textposition:'outside',cliponaxis:false,
+    hovertemplate:'%{y}: %{x} names<extra></extra>'}],
+    Object.assign(CAT(),{margin:{t:8,b:34,l:104,r:44},yaxis:Object.assign(CAT().yaxis,{autorange:'reversed'})}),CFG);
+
+  const bs=A.by_sector;
+  Plotly.newPlot('cSector',[{type:'bar',x:bs.map(s=>s.sector),y:bs.map(s=>s.n),
+    marker:{color:tok('--b'),opacity:0.85},
+    text:bs.map(s=>s.mean_ss!=null?s.mean_ss.toFixed(1):''),textposition:'outside',cliponaxis:false,textfont:{size:10,family:'JetBrains Mono'},
+    hovertemplate:'%{x}: %{y} names · mean Smart Score %{text}<extra></extra>'}],
+    Object.assign(CAT(),{margin:{t:16,b:74,l:40,r:10},xaxis:Object.assign(CAT().xaxis,{tickangle:-32,tickfont:{size:10}})}),CFG);
+
+  const axes=['insider','hedgefund','investor'], labs=['Insider','Hedge fund','Individual'];
+  const buck=(t,re)=>Object.entries(t||{}).filter(([kk])=>re.test(kk)).reduce((a,[,v])=>a+v,0);
+  const posv=axes.map(ax=>buck(A.sentiment[ax],/positive|bullish/i));
+  const negv=axes.map(ax=>buck(A.sentiment[ax],/negative|bearish/i));
+  const neuv=axes.map((ax,i)=>Math.max(0,(A.universe.liquid-(posv[i]+negv[i]))));
+  Plotly.newPlot('cSent',[
+    {type:'bar',name:'positive',x:labs,y:posv,marker:{color:tok('--g')}},
+    {type:'bar',name:'neutral / none',x:labs,y:neuv,marker:{color:tok('--bg4')}},
+    {type:'bar',name:'negative',x:labs,y:negv,marker:{color:tok('--r')}}],
+    Object.assign(CAT(),{barmode:'stack',showlegend:true,
+      legend:{x:0,y:1.12,orientation:'h',font:{size:11},bgcolor:'transparent'}}),CFG);
+
+  if(R.available){
+    $('#revSub').innerHTML=`Window <b>${R.prev_as_of} → ${R.as_of}</b> (${R.window_days} days, ${R.pairs} names present in both captures). A label change is <b>confirmed</b> only when the exported last-rating date falls inside the window — the guard against coverage-composition phantoms. Target-level moves carry a further caveat: the vendor re-picks its "best analyst", so a target can move on an identity switch with no analyst action; the confirmed split is the honest subset.`;
+    $('#revKpis').innerHTML=[
+      ['Upgrades', `${R.upgrades}`, `${R.confirmed_up} confirmed in-window`],
+      ['Downgrades', `${R.downgrades}`, `${R.confirmed_down} confirmed in-window`],
+      ['Best-target raises', R.target_raises, `${R.target_raises_confirmed||0} confirmed · median ${R.median_raise_pct!=null?'+'+R.median_raise_pct+'%':'—'}`],
+      ['Best-target cuts', R.target_cuts, `${R.target_cuts_confirmed||0} confirmed · median ${R.median_cut_pct!=null?R.median_cut_pct+'%':'—'}`],
+      ['Universe churn', `${R.entered_n} in · ${R.left_n} out`, 'membership, liquidity and delistings — retained, not erased']
+    ].map(r=>`<div class="kpi"><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
+    const b=R.breadth||[];
+    Plotly.newPlot('cBreadth',[{type:'bar',orientation:'h',
+      y:b.map(x=>x.sector),x:b.map(x=>x.net_upgrades),
+      marker:{color:b.map(x=>x.net_upgrades>=0?tok('--g'):tok('--r'))},
+      text:b.map(x=>` ↑${x.raises} · ↓${x.cuts}`),textposition:'outside',cliponaxis:false,textfont:{size:10},
+      hovertemplate:'%{y}: net %{x} label upgrades<extra></extra>'}],
+      Object.assign(CAT(),{height:300,margin:{t:8,b:36,l:140,r:110},
+        xaxis:Object.assign(CAT().xaxis,{title:{text:'net label upgrades over the window',font:{size:10}},zeroline:true,zerolinecolor:tok('--bd-strong')}),
+        yaxis:Object.assign(CAT().yaxis,{autorange:'reversed',tickfont:{size:10,family:'DM Sans'}})}),CFG);
+  } else {
+    $('#revSub').textContent='The revision layer lights up at the second weekly capture.';
+  }
+
+  const W=A.weekly||[];
+  $('#wkTbl thead').innerHTML='<tr>'+['Capture','Liquid','Buy-rated','Med. upside','Med. score','▲','▼','Tgt ↑','Tgt ↓']
+    .map((t,i)=>`<th class="${i===0?'l':''}">${t}</th>`).join('')+'</tr>';
+  $('#wkTbl tbody').innerHTML=W.map(w=>`<tr><td class="l">${w.as_of}</td><td>${w.liquid}</td><td>${w.pct_buy!=null?w.pct_buy+'%':'—'}</td><td>${pct(w.median_upside)}</td><td>${fmt(w.median_smart_score,1)}</td><td class="pos">${w.upgrades!=null?w.upgrades:'—'}</td><td class="neg">${w.downgrades!=null?w.downgrades:'—'}</td><td class="pos">${w.target_raises!=null?w.target_raises:'—'}</td><td class="neg">${w.target_cuts!=null?w.target_cuts:'—'}</td></tr>`).join('');
+
+  const p=Math.min(100,100*A.accrual.snapshots/A.accrual.min_snapshots);
+  $('#accFill').style.width=p+'%';
+  $('#accCap').textContent=`${A.accrual.snapshots}/${A.accrual.min_snapshots} weekly captures · ${A.accrual.matured} with a matured ~1-month window · verdicts barred before 26`;
+}
+
+if(AG_INLINE){ render(AG_INLINE); }
+else fetch('data/public/aggregates.json').then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(render)
+  .catch(e=>{$('#kpis').innerHTML=`<div class="kpi" style="grid-column:1/-1"><div class="kpi-lab">No data</div><div class="kpi-sub">Run <span style="font-family:var(--mono)">python scripts/pipeline.py</span> first (dev mode fetches data/public/aggregates.json). (${e})</div></div>`;});
+</script>
+</body>
+</html>

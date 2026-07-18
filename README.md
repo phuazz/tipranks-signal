@@ -10,7 +10,7 @@ First snapshot captured 2026-07-09 (1,987 names; Mid+Large+Mega, US primary). In
 
 Second snapshot filed 2026-07-18 (1,993 exported → 900 liquid; GTLS delisted in-window — its final return realises at analyse time, delisting-aware by design). The **Revision Monitor is live**: confirmed week-on-week upgrades / downgrades, best-analyst target revisions (identity-switch caveat disclosed), Smart-Score deltas and sector revision breadth; the panel's default order is now the week-on-week revision score.
 
-Remote: **public** repo at `github.com/phuazz/tipranks-signal` (made public 2026-07-18 by owner decision, after a full-history scan). What is public here is code, docs and OUR aggregate derived numbers only — per-name TipRanks / Norgate values never enter version control (`data/` is gitignored in full), the dashboard runs local-only, and its data files and HTML exports are never committed or hosted. A mandatory local pre-commit hook blocks `data/`, `*.csv`, `*.xlsx` and monitor exports outright; on a fresh clone, install it with `python scripts/install_hooks.py`.
+Remote: **public** repo at `github.com/phuazz/tipranks-signal` (made public 2026-07-18 by owner decision, after a full-history scan). What is public is code, docs, OUR aggregate derived numbers, and the **public page** at `phuazz.github.io/tipranks-signal` (`docs/index.html`, built by `scripts/pipeline.py` — aggregate panel state, revision-flow counts, methodology; a build-time leak guard fails the build if any ticker or per-name field reaches the output). Per-name TipRanks / Norgate values never enter version control (`data/` is gitignored in full), the per-name monitor runs local-only, and its data files and HTML exports are never committed or hosted. A mandatory local pre-commit hook blocks `data/`, `*.csv`, `*.xlsx` and monitor exports outright; on a fresh clone, install it with `python scripts/install_hooks.py`.
 
 ## Why this shape
 
@@ -27,6 +27,7 @@ There is **no API** on either licence (TipRanks Ultimate, Norgate Platinum — b
 2. `python scripts/ingest.py --export "C:\Users\phuaz\OneDrive\Main\tipranks-signal\tipranks_YYYY-MM-DD.csv" --asof YYYY-MM-DD`  (or pass the folder of page-files)
 3. `python scripts/merge_norgate.py --asof YYYY-MM-DD`  (NDU running)
 4. `python scripts/build_dashboard.py`  → refresh the local monitor; `python scripts/status.py` for accrual.
+5. `python scripts/pipeline.py`  → rebuild the public aggregate page (`docs/index.html`); commit and push `docs/` to publish.
 
 A few minutes weekly. `analyse.py` runs later, once the forward windows mature.
 
