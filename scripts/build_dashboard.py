@@ -38,6 +38,23 @@ def _latest_merge():
     return json.loads(files[-1].read_text(encoding="utf-8"))
 
 
+def _prev_merge():
+    files = sorted(MERGE_DIR.glob("merged_*.json")) if MERGE_DIR.exists() else []
+    return json.loads(files[-2].read_text(encoding="utf-8")) if len(files) >= 2 else None
+
+
+def _parse_rating_date(s):
+    """TipRanks exports 'May 27, 2026' (sometimes abbreviated). Date library only."""
+    if not s:
+        return None
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d"):
+        try:
+            return dt.datetime.strptime(s.strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _median(xs):
     xs = [x for x in xs if x is not None]
     return round(stats.median(xs), 2) if xs else None
@@ -135,15 +152,157 @@ def main() -> int:
             row["sector_pct"] = round(100.0 * sum(1 for x in vs if x < v) / (len(vs) - 1))
     n_lens = sum(1 for row in table if row["lens_pass"])
 
-    # --- per-name price history for the chart panel (lens-passed names) -------
-    # Display layer only: ~1y TOTALRETURN + 50/200-session averages per lens-
-    # passed name, one small JSON each, fetched by the template on row click.
-    # Skipped gracefully when NDU is down; the weekly flow runs post-merge with
-    # NDU already up.
+    # --- ticker -> record maps shared by the revision and chart layers --------
     sym_by_ticker = {r["ticker"]: r.get("norgate_symbol") for r in liquid}
     rec_by_ticker = {r["ticker"]: r for r in liquid}
-    price_dir = OUT_DIR / "prices"
+    # (the chart loop runs after the revision layer below, so strong week-on-week
+    # revisions qualify for price charts alongside lens-passed names)
     n_charts = 0
+
+    snaps = sorted(SNAP_DIR.glob("snapshot_*.json")) if SNAP_DIR.exists() else []
+    snap_dates = sorted(p.stem.replace("snapshot_", "") for p in snaps)
+    today = dt.date.today()
+    matured = sum(1 for d in snap_dates if (today - dt.date.fromisoformat(d)).days >= MATURE_DAYS)
+    revision_available = len(snap_dates) >= 2
+
+    # --- week-on-week revision layer (the pre-registered primary, view form) ---
+    # Frozen definitions applied at the VIEW layer: a rating change is a WoW
+    # consensus-label move between frozen snapshots, CONFIRMED only when the
+    # exported Last Rating Date falls inside the inter-snapshot window (guards
+    # composition-change phantoms); a target revision is a change in the
+    # best-analyst target LEVEL (price-driven upside moves do not qualify).
+    # Ungraded here -- analyse.py grades the frozen menu.
+    revision = {"available": False, "note": "Week-on-week revision tracking lights up at the next capture."}
+    prev = _prev_merge()
+    row_by_ticker = {row["ticker"]: row for row in table}
+    for row in table:
+        row["rev_rank"] = 0
+        row["rev_badge"] = None
+        row["rev_note"] = None
+    if prev is not None:
+        prev_asof = dt.date.fromisoformat(prev["as_of"])
+        now_asof = dt.date.fromisoformat(merge["as_of"])
+        prev_liq = {r["ticker"]: r for r in prev["records"] if r.get("liquid")}
+        now_all = {r["ticker"]: r for r in merge["records"]}
+        rank = {c: i for i, c in enumerate(CONSENSUS_ORDER)}  # 0 = Strong Buy
+        rows, n_conf_up, n_conf_dn = [], 0, 0
+        for t, r in ((t, r) for t, r in rec_by_ticker.items() if t in prev_liq):
+            p = prev_liq[t]
+            pc, nc = p.get("analyst_consensus"), r.get("analyst_consensus")
+            label_dir = 0
+            if pc in rank and nc in rank and pc != nc:
+                label_dir = 1 if rank[nc] < rank[pc] else -1
+            rd = _parse_rating_date(r.get("last_rating_date"))
+            confirmed = rd is not None and prev_asof < rd <= now_asof
+            bt_p, bt_n = p.get("best_analyst_price_target"), r.get("best_analyst_price_target")
+            bt_pct = None
+            if bt_p and bt_n and abs(bt_n - bt_p) > 0.01:
+                bt_pct = round((bt_n / bt_p - 1.0) * 100.0, 2)
+            ct_p, ct_n = p.get("analyst_price_target"), r.get("analyst_price_target")
+            ct_pct = None
+            if ct_p and ct_n and abs(ct_n - ct_p) > 0.01:
+                ct_pct = round((ct_n / ct_p - 1.0) * 100.0, 2)
+            ss_p, ss_n = p.get("smart_score"), r.get("smart_score")
+            ss_d = (ss_n - ss_p) if (ss_p is not None and ss_n is not None and ss_n != ss_p) else None
+            ins_flip = (p.get("insider_signal"), r.get("insider_signal")) \
+                if (p.get("insider_signal") or r.get("insider_signal")) and p.get("insider_signal") != r.get("insider_signal") else None
+            news_flip = (p.get("news_sentiment"), r.get("news_sentiment")) \
+                if (p.get("news_sentiment") or r.get("news_sentiment")) and p.get("news_sentiment") != r.get("news_sentiment") else None
+            if not (label_dir or bt_pct is not None or ss_d is not None or ins_flip or news_flip):
+                continue
+            score = 0
+            if label_dir > 0:
+                score += 5 if confirmed else 3
+                n_conf_up += 1 if confirmed else 0
+            if label_dir < 0:
+                score -= 5 if confirmed else 3
+                n_conf_dn += 1 if confirmed else 0
+            if bt_pct is not None:
+                score += 4 if bt_pct > 0 else -4
+            if ss_d is not None:
+                score += 1 if ss_d > 0 else -1
+            row = row_by_ticker.get(t)
+            note_bits = []
+            if label_dir:
+                note_bits.append(f"{pc} → {nc}" + (" (confirmed in window)" if confirmed else " (no rating date in window)"))
+            if bt_pct is not None:
+                note_bits.append(f"best target {'+' if bt_pct >= 0 else ''}{bt_pct}%")
+            if ss_d is not None:
+                ss_show = int(ss_d) if float(ss_d).is_integer() else ss_d
+                note_bits.append(f"Smart Score {'+' if ss_d > 0 else ''}{ss_show}")
+            if ins_flip:
+                note_bits.append(f"insider {ins_flip[0] or '—'} → {ins_flip[1] or '—'}")
+            if news_flip:
+                note_bits.append(f"news {news_flip[0] or '—'} → {news_flip[1] or '—'}")
+            if row is not None:
+                row["rev_rank"] = score
+                row["rev_badge"] = "up" if score > 0 else ("down" if score < 0 else None)
+                row["rev_note"] = " · ".join(note_bits)
+            rows.append({
+                "ticker": t, "company": r.get("company"), "sector": r.get("sector"),
+                "prev_cons": pc, "now_cons": nc, "dir": label_dir, "confirmed": confirmed,
+                "last_rating": r.get("last_rating_date"),
+                "bt_prev": bt_p, "bt_now": bt_n, "bt_pct": bt_pct, "ct_pct": ct_pct,
+                "ss_prev": ss_p, "ss_now": ss_n, "ss_d": ss_d,
+                "ins_prev": ins_flip[0] if ins_flip else None, "ins_now": ins_flip[1] if ins_flip else None,
+                "news_prev": news_flip[0] if news_flip else None, "news_now": news_flip[1] if news_flip else None,
+                "rev_rank": score,
+                "lens_pass": row["lens_pass"] if row is not None else None,
+                "chart": row.get("chart", False) if row is not None else False,
+                "upside_per_vol": row["upside_per_vol"] if row is not None else None,
+            })
+        entered = sorted(t for t in row_by_ticker if t not in prev_liq)
+        left = []
+        for t in sorted(prev_liq):
+            if t in row_by_ticker:
+                continue
+            nr = now_all.get(t)
+            if nr is None:
+                left.append({"ticker": t, "reason": "absent from this week's export"})
+            elif nr.get("norgate_symbol") is None:
+                left.append({"ticker": t, "reason": "unmatched on the feed — delisted in the window; the final return realises at analyse time"})
+            else:
+                left.append({"ticker": t, "reason": "lost index membership or liquidity floor"})
+        sect_rev: dict = {}
+        for rv in rows:
+            s = rv["sector"] or "—"
+            d = sect_rev.setdefault(s, {"up": 0, "down": 0, "raise": 0, "cut": 0})
+            d["up"] += 1 if rv["dir"] > 0 else 0
+            d["down"] += 1 if rv["dir"] < 0 else 0
+            d["raise"] += 1 if (rv["bt_pct"] or 0) > 0 else 0
+            d["cut"] += 1 if (rv["bt_pct"] or 0) < 0 else 0
+        sector_n = Counter((row["sector"] or "—") for row in table if row["ticker"] in prev_liq)
+        breadth = sorted(
+            [{"sector": s, "n": sector_n.get(s, 0), "net_upgrades": d["up"] - d["down"],
+              "raises": d["raise"], "cuts": d["cut"]} for s, d in sect_rev.items()],
+            key=lambda x: -(x["net_upgrades"]))
+        raises = [rv["bt_pct"] for rv in rows if (rv["bt_pct"] or 0) > 0]
+        cuts = [rv["bt_pct"] for rv in rows if (rv["bt_pct"] or 0) < 0]
+        raises_conf = sum(1 for rv in rows if (rv["bt_pct"] or 0) > 0 and rv["confirmed"])
+        cuts_conf = sum(1 for rv in rows if (rv["bt_pct"] or 0) < 0 and rv["confirmed"])
+        revision = {
+            "available": True, "prev_as_of": prev["as_of"], "as_of": merge["as_of"],
+            "window_days": (now_asof - prev_asof).days,
+            "pairs": len([t for t in rec_by_ticker if t in prev_liq]),
+            "upgrades": sum(1 for rv in rows if rv["dir"] > 0),
+            "downgrades": sum(1 for rv in rows if rv["dir"] < 0),
+            "confirmed_up": n_conf_up, "confirmed_down": n_conf_dn,
+            "target_raises": len(raises), "target_cuts": len(cuts),
+            "target_raises_confirmed": raises_conf, "target_cuts_confirmed": cuts_conf,
+            "median_raise_pct": _median(raises), "median_cut_pct": _median(cuts),
+            "score_up": sum(1 for rv in rows if (rv["ss_d"] or 0) > 0),
+            "score_down": sum(1 for rv in rows if (rv["ss_d"] or 0) < 0),
+            "rows": sorted(rows, key=lambda x: -x["rev_rank"]),
+            "entered": entered, "left": left, "breadth": breadth,
+        }
+
+    # --- per-name price history (lens-passed OR strongly-revised names) -------
+    # Display layer only: ~1y TOTALRETURN + 50/200-session averages, one small
+    # JSON each, fetched by the template on row click. |revision score| >= 8
+    # (label change and target move in agreement) earns a chart even off-lens --
+    # the revision leaders are exactly the names worth a look. Skipped
+    # gracefully when NDU is down; the weekly flow runs post-merge with NDU up.
+    price_dir = OUT_DIR / "prices"
     try:
         import norgate as ng
         ndu = ng.connect()
@@ -152,7 +311,7 @@ def main() -> int:
             old.unlink()
         asof_date = dt.date.fromisoformat(merge["as_of"])
         for row in table:
-            if not row["lens_pass"]:
+            if not (row["lens_pass"] or abs(row.get("rev_rank", 0)) >= 8):
                 continue
             sym = sym_by_ticker.get(row["ticker"])
             if not sym:
@@ -174,12 +333,9 @@ def main() -> int:
         print(f"[dashboard] price charts skipped ({exc})", file=sys.stderr)
     for row in table:
         row.setdefault("chart", False)
-
-    snaps = sorted(SNAP_DIR.glob("snapshot_*.json")) if SNAP_DIR.exists() else []
-    snap_dates = sorted(p.stem.replace("snapshot_", "") for p in snaps)
-    today = dt.date.today()
-    matured = sum(1 for d in snap_dates if (today - dt.date.fromisoformat(d)).days >= MATURE_DAYS)
-    revision_available = len(snap_dates) >= 2
+    if revision.get("available"):
+        for rv in revision["rows"]:
+            rv["chart"] = bool(row_by_ticker.get(rv["ticker"], {}).get("chart"))
 
     payload = {
         "generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
@@ -209,10 +365,7 @@ def main() -> int:
         "table": table,
         "accrual": {"snapshots": len(snap_dates), "dates": snap_dates,
                     "matured": matured, "min_snapshots": MIN_SNAPSHOTS, "mature_days": MATURE_DAYS},
-        "revision": {"available": revision_available,
-                     "prev_as_of": snap_dates[-2] if revision_available else None,
-                     "note": ("Ready." if revision_available
-                              else "Week-on-week revision tracking lights up at the next capture.")},
+        "revision": revision,
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / "dashboard_data.json"
@@ -222,8 +375,17 @@ def main() -> int:
           f"{med_tr3m if med_tr3m is not None else 'n/a'}%), {n_charts} price charts "
           f"-> {out.relative_to(ROOT)} ({out.stat().st_size // 1024} KB)")
     print(f"[dashboard] live: Panel State + Accrual | Revision="
-          f"{'ON' if revision_available else 'accruing'} | Findings locked "
+          f"{'ON' if revision.get('available') else 'accruing'} | Findings locked "
           f"({len(snap_dates)}/{MIN_SNAPSHOTS})")
+    if revision.get("available"):
+        print(f"[dashboard] revision {revision['prev_as_of']} -> {revision['as_of']} "
+              f"({revision['window_days']}d window, {revision['pairs']} pairs): "
+              f"{revision['upgrades']} upgrades ({revision['confirmed_up']} confirmed) / "
+              f"{revision['downgrades']} downgrades ({revision['confirmed_down']} confirmed); "
+              f"best-target raises {revision['target_raises']} (median "
+              f"{revision['median_raise_pct']}%) / cuts {revision['target_cuts']}; "
+              f"score up {revision['score_up']} / down {revision['score_down']}; "
+              f"entered {len(revision['entered'])}, left {len(revision['left'])}")
     return 0
 
 

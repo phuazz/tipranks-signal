@@ -75,7 +75,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.
 .tbl-tools .hint{font-size:11.5px;color:var(--t3)}
 .tbl-wrap{overflow:auto;max-height:72vh;border:1px solid var(--bd);border-radius:var(--radius-lg);background:var(--bg2)}
 table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
-thead th{position:sticky;top:0;z-index:3;background:var(--bg3);text-align:right;padding:9px 9px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--bd2);cursor:pointer;white-space:nowrap}
+thead th{position:sticky;top:0;z-index:3;background:var(--bg3);text-align:right;padding:9px 8px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--bd2);cursor:pointer;white-space:nowrap}
 thead th.l{text-align:left}
 thead th:first-child{position:sticky;left:0;z-index:4}
 tbody td:first-child{position:sticky;left:0;background:var(--bg2);z-index:1}
@@ -108,7 +108,7 @@ tbody tr:hover td:first-child{background:var(--bg-hover)}
 .wp-good{color:var(--g);font-weight:700;margin-right:4px}
 .wp-warn{color:#b45309;font-weight:700;margin-right:4px}
 .wp-tail{font-size:10.5px;color:var(--t4);margin-top:3px}
-tbody td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
+tbody td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
 tbody td.l{text-align:left;font-family:var(--sans)}
 tbody tr:hover{background:var(--bg-hover)}
 .tk{font-weight:700;color:var(--t1)}
@@ -193,7 +193,7 @@ tbody tr{cursor:pointer}
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Liquid universe — the panel</h3>
-      <div class="cap"><b>Default order = Sector rank</b>, the sector-relative percentile of upside ÷ vol — implied upside predicts <em>within</em> sector, not across the market (Da &amp; Schaumburg) — with fresher ratings first on ties; from snapshot 2 the default becomes "revised this week first". <b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — proprietary weights, 10 most bullish; a column and a filter here, not the order, because levels are the weakest evidence layer. <b>Hide trap profiles</b> removes names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — view-only, ungraded. Details on the Literature tab.</div>
+      <div class="cap"><b>Default order = revised this week first</b> (the "This wk" score: confirmed upgrades and best-target raises at the top, bearish revisions at the bottom, ties broken by rating freshness then upside ÷ vol) — the revision, not the level, is where the tested edge lives; before snapshot 2 the order falls back to <b>Sector rank</b>, the sector-relative percentile of upside ÷ vol (implied upside predicts <em>within</em> sector — Da &amp; Schaumburg). <b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — proprietary weights, 10 most bullish; a column and a filter here, not the order, because levels are the weakest evidence layer. <b>Hide trap profiles</b> removes names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — view-only, ungraded. Details on the Literature tab.</div>
       <div class="tbl-tools">
         <input id="filter" placeholder="Filter ticker / company / sector…">
         <span class="hint" id="tblHint">—</span>
@@ -215,14 +215,29 @@ tbody tr{cursor:pointer}
 
   <!-- REVISION MONITOR -->
   <div class="pane" id="pane-revision">
-    <div class="staged">
+    <div id="revLive" style="display:none">
+      <div class="kpi-strip" id="revKpis"></div>
+      <div class="note" style="margin-bottom:16px"><b>How to read this.</b> A label change is <b>confirmed</b> only when the exported Last Rating Date falls inside the inter-snapshot window — unconfirmed moves can be coverage-composition phantoms. Best-analyst target changes carry a second caveat: TipRanks re-picks the "best analyst", so a target can move because the <em>identity</em> switched, not because anyone acted — the confirmed split is the honest subset. All view-layer and ungraded; the graded read stays locked until accrual.</div>
+      <div class="grid">
+        <div class="card"><h3>Bullish revisions — top by revision score</h3><div class="cap">Score = label change (confirmed ±5, unconfirmed ±3) + best-target move (±4) + Smart-Score move (±1) · bar length = |score|, colour = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · click a row for its chart.</div><div id="sbRevUp"></div></div>
+        <div class="card"><h3>Bearish revisions — top by revision score</h3><div class="cap">Downgrade drift is documented as larger and longer-lived than upgrade drift (Womack) — the bearish tail is information, not noise, even for a long-only book: it is the do-not-buy list.</div><div id="sbRevDn"></div></div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <h3>Sector revision breadth</h3>
+        <div class="cap">Net label upgrades (upgrades − downgrades) per sector this window; the annotation counts best-analyst target raises ↑ and cuts ↓. This flow read is the defensible sector-attractiveness view — sector mean Smart Score is a levels read and carries little.</div>
+        <div id="cRevSector" class="chart" style="height:320px"></div>
+      </div>
+      <div class="card">
+        <h3>All revisions this window</h3>
+        <div class="cap" id="revTblCap">—</div>
+        <div class="tbl-wrap" style="max-height:60vh"><table id="rtbl"><thead></thead><tbody></tbody></table></div>
+        <div class="cap" id="revMoves" style="margin-top:8px">—</div>
+      </div>
+    </div>
+    <div class="staged" id="revStaged">
       <div class="big">The revision monitor lights up at snapshot 2</div>
       <p>This is the useful part: week-on-week <b>upgrades / downgrades</b>, best-analyst <b>target raises &amp; cuts</b>, Smart-Score deltas, and sentiment flips over the liquid universe — the honest operationalisation of the revision edge.</p>
       <p id="revNext">Next capture will populate it.</p>
-    </div>
-    <div class="staged" style="margin-top:16px">
-      <div class="big">Sector revision breadth — staged</div>
-      <p>The defensible sector-attractiveness read: share of names <b>upgraded minus downgraded</b>, and share with the <b>best-analyst target raised</b>, by sector. Sector mean Smart Score (Panel State) is a levels read and carries little; breadth of fresh revisions is the sector view worth watching. Lights up with snapshot 2.</p>
     </div>
   </div>
 
@@ -541,6 +556,7 @@ function renderPrice(r,h){
 
 const COLS=[
   ['ticker','Name','l','Click the row for the price chart'],
+  ['rev_rank','This wk','r','Week-on-week revision score: label change (confirmed ±5, unconfirmed ±3) + best-analyst target move (±4) + Smart-Score move (±1). ▲ bullish, ▼ bearish — hover a badge for the detail. Default sort key from snapshot 2; see the Revision Monitor for the full view'],
   ['sector','Sector','l',''],
   ['smart_score','Smart Score','r','TipRanks Smart Score, 1 bearish to 10 bullish — proprietary 8-factor composite: analyst consensus, blogger opinion, insider activity, hedge-fund activity (quarterly 13F), news sentiment, crowd sentiment, technicals, fundamentals. It embeds the consensus, so it never gates other analyst signals; graded once as S1c — see the Literature tab'],
   ['consensus','Consensus','l','All-analyst consensus rating'],
@@ -551,7 +567,7 @@ const COLS=[
   ['vol_ann','Vol %','r','Annualised daily volatility over the same ~3-month window'],
   ['upside_per_vol','Upside ÷ vol','r','Best-analyst upside per unit of annualised volatility — target distance in years of risk'],
   ['sector_pct','Sector rank','r','Percentile of Upside ÷ vol within the sector (100 = most upside per unit of risk among peers). Upside ranks within sector, not across the market'],
-  ['bvc_gap','Best − cons.','r','Best-analyst target vs the consensus target; a wide gap means analyst disagreement, when consensus targets are least reliable'],
+  ['bvc_gap','B−C gap','r','Best-analyst target vs the consensus target, %; a wide gap means analyst disagreement, when consensus targets are least reliable'],
   ['insider','Insider','r','TipRanks insider signal; Negative is hidden by the lens'],
   ['div_yield','Yld %','r','Trailing dividend yield, % (style control, not a signal)'],
   ['mktcap_b','Cap $B','r','Market capitalisation, USD billions']
@@ -631,7 +647,12 @@ function renderTable(){
   $('#tbl tbody').innerHTML=rows.slice(0,600).map(r=>{
     const ssc=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
     const up=v=>v==null?'—':`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;
-    return `<tr data-t="${r.ticker}"><td class="l tk">${r.ticker}${r.chart?' <span style="color:var(--t4);font-size:9px">▸</span>':''}<div class="co" style="font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${r.company||''}</div></td><td class="l co">${r.sector||''}</td>
+    const rb=r.rev_badge==='up'
+      ?`<span class="pos" style="font-weight:700" title="${(r.rev_note||'').replace(/"/g,'&quot;')}">▲${r.rev_rank}</span>`
+      :r.rev_badge==='down'
+      ?`<span class="neg" style="font-weight:700" title="${(r.rev_note||'').replace(/"/g,'&quot;')}">▼${Math.abs(r.rev_rank)}</span>`
+      :'<span style="color:var(--t4)">·</span>';
+    return `<tr data-t="${r.ticker}"><td class="l tk">${r.ticker}${r.chart?' <span style="color:var(--t4);font-size:9px">▸</span>':''}<div class="co" style="font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${r.company||''}</div></td><td>${rb}</td><td class="l co">${r.sector||''}</td>
       <td>${ssc}</td><td class="l"><span class="chip ${chipCls(r.consensus)}">${r.consensus||'—'}</span></td>
       <td class="l"><span class="chip ${chipCls(r.best_consensus)}">${r.best_consensus||'—'}</span></td>
       <td>${up(r.upside)}</td><td>${up(r.best_upside)}</td>
@@ -644,6 +665,60 @@ function renderTable(){
     + (rows.length>600?`<tr><td colspan="${COLS.length}" class="l co" style="text-align:center">… ${rows.length-600} more — filter to narrow</td></tr>`:'');
 }
 
+function revisionPane(){
+  const R=D.revision, live=$('#revLive'), staged=$('#revStaged');
+  if(!R||!R.available){ if(live)live.style.display='none'; if(staged)staged.style.display=''; return; }
+  live.style.display=''; staged.style.display='none';
+  const conf=(R.confirmed_up||0)+(R.confirmed_down||0), tot=(R.upgrades||0)+(R.downgrades||0);
+  $('#revKpis').innerHTML=[
+    ['Window',`${R.window_days}d`,`${R.prev_as_of} → ${R.as_of} · ${R.pairs} names in both weeks`],
+    ['Label changes',`${R.upgrades}▲ · ${R.downgrades}▼`,`${conf} of ${tot} confirmed by a rating date in the window`],
+    ['Best-target raises',R.target_raises,`${R.target_raises_confirmed||0} confirmed · median ${R.median_raise_pct!=null?'+'+R.median_raise_pct+'%':'—'} · identity-switch caveat`],
+    ['Best-target cuts',R.target_cuts,`${R.target_cuts_confirmed||0} confirmed · median ${R.median_cut_pct!=null?R.median_cut_pct+'%':'—'}`],
+    ['Smart Score moves',`${R.score_up}↑ · ${R.score_down}↓`,'the composite recomputes constantly — context, not signal']
+  ].map(r=>`<div class="kpi"><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
+  const rows=R.rows||[];
+  const maxR=Math.max(1,...rows.map(x=>Math.abs(x.rev_rank)));
+  const bits=rv=>{const b=[];
+    if(rv.dir)b.push(`${rv.prev_cons} → ${rv.now_cons}${rv.confirmed?'':' (unconf.)'}`);
+    if(rv.bt_pct!=null)b.push(`tgt ${rv.bt_pct>0?'+':''}${rv.bt_pct.toFixed(1)}%`);
+    if(rv.ss_d)b.push(`SS ${rv.ss_d>0?'+':''}${rv.ss_d}`);
+    return b.join(' · ');};
+  const sbrow=rv=>{const w=Math.max(6,Math.round(100*Math.abs(rv.rev_rank)/maxR));
+    return `<div class="sb-row" data-t="${rv.ticker}"><span class="sb-tk">${rv.ticker}</span><span class="sb-bar-wrap"><span class="sb-bar" style="width:${w}%;background:${ssColor(rv.ss_now!=null?rv.ss_now:5)}"></span></span><span class="sb-val">${rv.rev_rank>0?'+':''}${rv.rev_rank}</span><span class="sb-ctx">${bits(rv)} · ${rv.sector||''}</span></div>`;};
+  $('#sbRevUp').innerHTML=rows.filter(x=>x.rev_rank>0).slice(0,5).map(sbrow).join('')||'<span class="hint">none this window</span>';
+  $('#sbRevDn').innerHTML=rows.filter(x=>x.rev_rank<0).sort((a,b)=>a.rev_rank-b.rev_rank).slice(0,5).map(sbrow).join('')||'<span class="hint">none this window</span>';
+  document.querySelectorAll('#sbRevUp .sb-row, #sbRevDn .sb-row').forEach(el=>el.addEventListener('click',()=>openChart(el.dataset.t)));
+  const b=R.breadth||[];
+  Plotly.newPlot('cRevSector',[{type:'bar',orientation:'h',
+    y:b.map(x=>x.sector), x:b.map(x=>x.net_upgrades),
+    marker:{color:b.map(x=>x.net_upgrades>=0?tok('--g'):tok('--r'))},
+    text:b.map(x=>` ↑${x.raises} · ↓${x.cuts}`), textposition:'outside', cliponaxis:false,
+    hovertemplate:'%{y}: net %{x} label upgrades<extra></extra>'}],
+    Object.assign(CAT(),{height:320,margin:{t:8,b:36,l:150,r:120},
+      xaxis:Object.assign(CAT().xaxis,{title:{text:'net label upgrades over the window',font:{size:10}},zeroline:true,zerolinecolor:tok('--bd-strong')}),
+      yaxis:Object.assign(CAT().yaxis,{autorange:'reversed'})}),CFG);
+  const cap=500;
+  $('#revTblCap').textContent=`${rows.length} names moved on at least one axis this window — sorted bullish → bearish by revision score · click a row for its chart`+(rows.length>cap?` · showing ${cap}`:'');
+  $('#rtbl thead').innerHTML='<tr>'+['Name','Label change','Conf.','Best target','Δ%','SS δ','Insider','News','Score']
+    .map((h,i)=>`<th class="${i<=1?'l':''}">${h}</th>`).join('')+'</tr>';
+  const flip=(a,c)=>a||c?`${a||'—'} → ${c||'—'}`:'—';
+  $('#rtbl tbody').innerHTML=rows.slice(0,cap).map(rv=>{
+    const lbl=rv.dir?`<span class="chip ${chipCls(rv.prev_cons)}">${rv.prev_cons||'—'}</span> → <span class="chip ${chipCls(rv.now_cons)}">${rv.now_cons||'—'}</span>`:'<span style="color:var(--t4)">—</span>';
+    const tgt=rv.bt_now!=null?('$'+rv.bt_now.toFixed(2)+(rv.bt_prev!=null&&rv.bt_pct!=null?` <span class="co">(prev $${rv.bt_prev.toFixed(2)})</span>`:'')):'—';
+    const dpct=rv.bt_pct!=null?`<span class="${rv.bt_pct>=0?'pos':'neg'}">${rv.bt_pct>0?'+':''}${rv.bt_pct.toFixed(1)}%</span>`:'—';
+    const ssd=rv.ss_d?`<span class="${rv.ss_d>0?'pos':'neg'}">${rv.ss_d>0?'+':''}${rv.ss_d}</span>`:'—';
+    return `<tr data-t="${rv.ticker}"><td class="l tk">${rv.ticker}${rv.chart?' <span style="color:var(--t4);font-size:9px">▸</span>':''}<div class="co" style="font-weight:400;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rv.company||''}</div></td>
+      <td class="l">${lbl}</td>
+      <td>${rv.confirmed?'<span class="pos">✓</span>':'<span style="color:var(--t4)">·</span>'}</td>
+      <td>${tgt}</td><td>${dpct}</td><td>${ssd}</td>
+      <td class="l co">${rv.ins_prev||rv.ins_now?flip(rv.ins_prev,rv.ins_now):'—'}</td>
+      <td class="l co">${rv.news_prev||rv.news_now?flip(rv.news_prev,rv.news_now):'—'}</td>
+      <td style="font-weight:700">${rv.rev_rank>0?'+':''}${rv.rev_rank}</td></tr>`;}).join('');
+  const leftTxt=(R.left||[]).map(x=>`${x.ticker} — ${x.reason}`).join(' · ')||'none';
+  $('#revMoves').innerHTML=`<b>Universe moves this window:</b> entered ${(R.entered||[]).length?R.entered.join(', '):'none'} · left: ${leftTxt}.`;
+}
+
 function accrual(){
   const a=D.accrual;
   $('#accHead').textContent=`${a.snapshots} of ${a.min_snapshots} weekly captures`;
@@ -653,14 +728,16 @@ function accrual(){
   $('#accCap').textContent=cap; $('#findCap').textContent=cap;
   $('#accList').innerHTML=a.dates.map(d=>`• ${d}`).join('<br>')||'—';
   if(a.snapshots>=2){$('#revLock').textContent='live';}
-  $('#revNext').textContent = a.snapshots>=2 ? 'Ready — build the revision view.' :
-     'Next capture will populate it (weekly reminder set for Thursdays).';
+  const rn=$('#revNext');
+  if(rn) rn.textContent = a.snapshots>=2 ? 'Live — see the revision panels.' :
+     'Next capture will populate it (weekly cadence: Thursdays).';
 }
 
 function boot(){
   $('#pillDate').textContent='as of '+D.as_of;
   $('#foot').textContent=`Generated ${D.generated_utc} · liquid universe ${D.universe.indices.join(' + ')} · PRIVATE / personal-use — TipRanks & Norgate values stay local, never published.`;
-  kpis(); chartSS(); chartCons(); chartSector(); chartSent(); chartLeaders(); buildChips(); renderTable(); accrual();
+  if(D.revision&&D.revision.available){sortKey='rev_rank';sortDir=-1;}
+  kpis(); chartSS(); chartCons(); chartSector(); chartSent(); chartLeaders(); buildChips(); renderTable(); revisionPane(); accrual();
 }
 
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
@@ -673,7 +750,7 @@ $('#filter').addEventListener('input',renderTable);
 $('#chClose').addEventListener('click',closeChart);
 $('#chartOvl').addEventListener('click',e=>{if(e.target.id==='chartOvl')closeChart();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart();});
-document.addEventListener('click',e=>{const row=e.target.closest('#tbl tbody tr[data-t]');if(row)openChart(row.dataset.t);});
+document.addEventListener('click',e=>{const row=e.target.closest('#tbl tbody tr[data-t], #rtbl tbody tr[data-t]');if(row)openChart(row.dataset.t);});
 document.addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(!th)return;
   const k=th.dataset.k; if(k===sortKey)sortDir*=-1;else{sortKey=k;sortDir=(k==='ticker'||k==='company'||k==='sector')?1:-1;}renderTable();});
 

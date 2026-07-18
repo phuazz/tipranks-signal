@@ -8,6 +8,8 @@ Forward-tested study of **TipRanks analyst signals** as cross-sectional predicto
 
 First snapshot captured 2026-07-09 (1,987 names; Mid+Large+Mega, US primary). Ingest and the Norgate merge run on live data; the forward-return analysis is pre-registered but **not yet runnable** (it needs weekly snapshots to accrue). The scoring & selection framework was **frozen 2026-07-10** — five graded schemes, shared construction conventions, KEEP bar and graduation rule (`RESEARCH_MEMO.md`, register rows 3–5); `analyse.py` implements it in a later, mechanical session. See `RESEARCH_MEMO.md`.
 
+Second snapshot filed 2026-07-18 (1,993 exported → 900 liquid; GTLS delisted in-window — its final return realises at analyse time, delisting-aware by design). The **Revision Monitor is live**: confirmed week-on-week upgrades / downgrades, best-analyst target revisions (identity-switch caveat disclosed), Smart-Score deltas and sector revision breadth; the panel's default order is now the week-on-week revision score.
+
 Remote: **private** repo at `github.com/phuazz/tipranks-signal` (code and docs only — `data/` is gitignored in full and never pushed, per the IP firewall).
 
 ## Why this shape
@@ -48,11 +50,11 @@ python scripts/export_html.py        # one-file snapshot -> data/exports/ (gitig
 
 The export inlines the data and all price series into a single HTML file that opens by double-click (charts need internet for the Plotly CDN). It contains per-name vendor values, so it is for person-to-person discussion only — never hosted, never forwarded onward; the page carries that label. The shareable public layer remains the aggregate findings once verdicts exist. For anywhere-access, copy the dated export to `OneDrive\Main\tipranks-signal\` alongside the raw CSVs (done for 2026-07-09) — OneDrive is private storage, not publication.
 
-Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sector, flow signals, the **Sector Leaders** board (vol-scaled best-analyst upside per sector, top three labelled), and the liquid-universe table with the view-only lens: trap-profile filter + sector-relative Best↑/σ ranking, ungraded; click any row or leader dot for a PCC-style price chart with 50d/200d averages and analyst-target lines, built per lens-passed name into `data/dashboard/prices/`) and **Accrual** are live now; **Revision Monitor** lights up at snapshot 2 (week-on-week upgrades / target raises / score deltas — the useful part; sector revision breadth staged there too); **Findings** (the drift-adjusted-alpha read) stays locked until ~8 captures; **Literature** is static reference — the research map behind the frozen design and the panel lens.
+Tabs: **Panel State** (current cross-section — Smart Score, consensus mix, sector, flow signals, the **Sector Leaders** board (vol-scaled best-analyst upside per sector, top three labelled), and the liquid-universe table with the view-only lens: trap-profile filter + revision-score default order, ungraded; click any row or leader dot for a PCC-style price chart with 50d/200d averages and analyst-target lines, built into `data/dashboard/prices/` for lens-passed and strongly-revised names); **Revision Monitor** (live from snapshot 2 — confirmed week-on-week upgrades / downgrades, best-analyst target revisions with the identity-switch caveat, Smart-Score deltas, sector revision breadth, and the full revision table); **Accrual** is live; **Findings** (the drift-adjusted-alpha read) stays locked until ~8 captures; **Literature** is static reference — the research map behind the frozen design and the panel lens.
 
 ## Open issues
 
 - Schema confirmed 2026-07-09 (26-column CSV; `COLUMN_MAP` locked). The two unmapped columns (Volume, Avg. Volume (3M)) are skipped by design — Norgate supplies liquidity.
 - Ticker → Norgate symbol resolution is best-effort (class shares); the merge **flags** misses rather than dropping them — review the unmatched list on the first merge.
 
-_Last updated: 2026-07-10._
+_Last updated: 2026-07-18._
