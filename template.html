@@ -187,8 +187,10 @@ tbody tr{cursor:pointer}
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Sector leaders — who looks attractive, and by how much</h3>
-      <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · the top three per sector are labelled · sectors ordered by their best name, lens-passed count in brackets. Hover for the analyst detail; click any dot for its price chart.</div>
+      <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · the top three per sector are labelled · sectors ordered by their best name, filtered count in brackets. The chips below filter this board and the panel table together. Hover for the analyst detail; click any dot for its price chart.</div>
       <div class="note" style="margin:6px 0 10px;font-size:11.5px"><b>Caveats from the literature (details on the Literature tab):</b> analysts realise roughly 16–18 cents per dollar of claimed upside — read position as direction, not forecast. A far-right dot that got there through a recent price fall is usually a <em>stale target mean-reverting down to price</em>, not conviction; the trap gate removes the worst, and the chart click is the check for the rest. Implied upside compares reliably <b>within a row</b> — cross-sector comparison stands on weaker evidence (Da &amp; Schaumburg). Analyst-implied and ungraded throughout.</div>
+      <div class="chiprow" id="secChips"></div>
+      <div class="chiprow" id="qChips"></div>
       <div id="cLeaders" class="chart" style="height:470px"></div>
     </div>
     <div class="card" style="margin-bottom:16px">
@@ -197,10 +199,8 @@ tbody tr{cursor:pointer}
       <div class="tbl-tools">
         <input id="filter" placeholder="Filter ticker / company / sector…">
         <span class="hint" id="tblHint">—</span>
-        <span class="hint">· click a row for its price chart · hover a header for definitions</span>
+        <span class="hint">· click a row for its price chart · hover a header for definitions · the sector / score / index / cap / action chips on the board above filter this table too</span>
       </div>
-      <div class="chiprow" id="secChips"></div>
-      <div class="chiprow" id="qChips"></div>
       <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="grid">
@@ -446,8 +446,8 @@ function chartSent(){
 }
 
 function chartLeaders(){
-  const rows=D.table.filter(r=>r.lens_pass&&r.upside_per_vol!=null);
-  if(!rows.length){Plotly.purge('cLeaders');return;}
+  const rows=filteredRows().filter(r=>r.upside_per_vol!=null);
+  if(!rows.length){Plotly.purge('cLeaders');$('#cLeaders').innerHTML='<div class="hint" style="padding:36px 8px">No names pass the current filter combination — loosen a chip above.</div>';return;}
   const by={};rows.forEach(r=>{const s=r.sector||'—';(by[s]=by[s]||[]).push(r);});
   const label={};Object.keys(by).forEach(s=>{label[s]=`${s} (${by[s].length})`;});
   const secs=Object.keys(by).sort((a,b)=>Math.max(...by[b].map(r=>r.upside_per_vol))-Math.max(...by[a].map(r=>r.upside_per_vol)));
@@ -575,8 +575,18 @@ const COLS=[
 let sortKey='sector_pct', sortDir=-1;
 function chipCls(v){return v==='Strong Buy'?'chip-sb':v==='Moderate Buy'?'chip-mb':v==='Hold'?'chip-h':v?'chip-s':''}
 
-const SEL={sectors:new Set(), minScore:0, idx:new Set(), lens:true};
+const SEL={sectors:new Set(), minScore:0, idx:new Set(), lens:true, topCap:0, action:''};
 function actionTier(s){const a=Math.abs(s);return (a>=9?'strong ':a>=4?'clear ':'faint ')+(s>0?'bullish':'bearish');}
+function filteredRows(){
+  let rows=D.table;
+  if(SEL.lens) rows=rows.filter(r=>r.lens_pass);
+  if(SEL.sectors.size) rows=rows.filter(r=>SEL.sectors.has(r.sector));
+  if(SEL.minScore) rows=rows.filter(r=>r.smart_score!=null&&r.smart_score>=SEL.minScore);
+  if(SEL.idx.size) rows=rows.filter(r=>SEL.idx.has(r.idx));
+  if(SEL.action) rows=rows.filter(r=>r.rev_badge===SEL.action);
+  if(SEL.topCap) rows=[...rows].sort((a,b)=>(b.mktcap_b||0)-(a.mktcap_b||0)).slice(0,SEL.topCap);
+  return rows;
+}
 function buildChips(){
   const secs=[...new Set(D.table.map(r=>r.sector).filter(Boolean))].sort();
   $('#secChips').innerHTML='<span class="lab">Sector</span>'
@@ -585,14 +595,20 @@ function buildChips(){
     +[[0,'Any'],[6,'6+'],[7,'7+'],[8,'8+'],[9,'9+'],[10,'10']].map(x=>`<button class="chipbtn scoreb${x[0]===0?' on':''}" data-m="${x[0]}">${x[1]}</button>`).join('')
     +'<span class="lab" style="margin-left:14px">Index</span>'
     +[['500','S&P 500'],['400','MidCap 400']].map(x=>`<button class="chipbtn" data-i="${x[0]}">${x[1]}</button>`).join('')
+    +'<span class="lab" style="margin-left:14px">Top cap</span>'
+    +[[0,'All'],[50,'Top 50'],[100,'Top 100'],[250,'Top 250']].map(x=>`<button class="chipbtn capb${x[0]===0?' on':''}" data-c="${x[0]}" title="Keep only the X largest names by market capitalisation, applied after the other filters">${x[1]}</button>`).join('')
+    +'<span class="lab" style="margin-left:14px">Action</span>'
+    +[['','Any'],['up','▲ this week'],['down','▼ this week']].map(x=>`<button class="chipbtn actb${x[0]===''?' on':''}" data-a="${x[0]}" title="Only names where analysts acted this week (see the Action column)">${x[1]}</button>`).join('')
     +'<span class="lab" style="margin-left:14px">Lens</span>'
     +`<button class="chipbtn lensb on" data-l="1" title="Hides names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, or net insider selling, or Smart Score ≤ 4. View-only and ungraded — the graded schemes are frozen in the memo.">Hide trap profiles</button>`;
   const onChip=e=>{const b=e.target.closest('.chipbtn');if(!b)return;
     if(b.dataset.s!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.sectors.add(b.dataset.s);else SEL.sectors.delete(b.dataset.s);}
     else if(b.dataset.i!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.idx.add(b.dataset.i);else SEL.idx.delete(b.dataset.i);}
     else if(b.dataset.l!==undefined){b.classList.toggle('on');SEL.lens=b.classList.contains('on');}
+    else if(b.dataset.c!==undefined){SEL.topCap=+b.dataset.c;document.querySelectorAll('#qChips .capb').forEach(x=>x.classList.toggle('on',+x.dataset.c===SEL.topCap));}
+    else if(b.dataset.a!==undefined){SEL.action=b.dataset.a;document.querySelectorAll('#qChips .actb').forEach(x=>x.classList.toggle('on',x.dataset.a===SEL.action));}
     else{SEL.minScore=+b.dataset.m;document.querySelectorAll('#qChips .scoreb').forEach(x=>x.classList.toggle('on',+x.dataset.m===SEL.minScore));}
-    renderTable();};
+    renderTable();chartLeaders();};
   $('#secChips').addEventListener('click',onChip);
   $('#qChips').addEventListener('click',onChip);
 }
@@ -628,13 +644,9 @@ function renderTable(){
   $('#tbl thead').innerHTML='<tr>'+th+'</tr>';
   const q=($('#filter').value||'').toLowerCase();
   const lensOn=SEL.lens;
-  let rows=D.table.filter(r=>!q||(r.ticker+' '+(r.company||'')+' '+(r.sector||'')).toLowerCase().includes(q));
-  const preLens=rows.length;
-  if(lensOn) rows=rows.filter(r=>r.lens_pass);
-  const lensHidden=preLens-rows.length;
-  if(SEL.sectors.size) rows=rows.filter(r=>SEL.sectors.has(r.sector));
-  if(SEL.minScore) rows=rows.filter(r=>r.smart_score!=null&&r.smart_score>=SEL.minScore);
-  if(SEL.idx.size) rows=rows.filter(r=>SEL.idx.has(r.idx));
+  const qf=r=>!q||(r.ticker+' '+(r.company||'')+' '+(r.sector||'')).toLowerCase().includes(q);
+  let rows=filteredRows().filter(qf);
+  const lensHidden=lensOn?(D.table.filter(qf).length-D.table.filter(r=>qf(r)&&r.lens_pass).length):0;
   rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];
     if(x==null&&y!=null)return 1;
     if(y==null&&x!=null)return -1;
