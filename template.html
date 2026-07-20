@@ -187,7 +187,7 @@ tbody tr{cursor:pointer}
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Sector leaders — who looks attractive, and by how much</h3>
-      <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · the top three per sector are labelled · sectors ordered by their best name, filtered count in brackets. The chips below filter this board and the panel table together. Hover for the analyst detail; click any dot for its price chart.</div>
+      <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · names are labelled wherever they fit — every dot in a sparse (filtered) view, the leaders first in a dense one · sectors ordered by their best name, filtered count in brackets. The chips below filter this board and the panel table together. Hover for the analyst detail; click any dot for its price chart.</div>
       <div class="note" style="margin:6px 0 10px;font-size:11.5px"><b>Caveats from the literature (details on the Literature tab):</b> analysts realise roughly 16–18 cents per dollar of claimed upside — read position as direction, not forecast. A far-right dot that got there through a recent price fall is usually a <em>stale target mean-reverting down to price</em>, not conviction; the trap gate removes the worst, and the chart click is the check for the rest. Implied upside compares reliably <b>within a row</b> — cross-sector comparison stands on weaker evidence (Da &amp; Schaumburg). Analyst-implied and ungraded throughout.</div>
       <div class="chiprow" id="secChips"></div>
       <div class="chiprow" id="qChips"></div>
@@ -463,15 +463,34 @@ function chartLeaders(){
   };
   const base={type:'scatter',mode:'markers',x:[],y:[],text:[],hovertemplate:'%{text}<extra></extra>',cliponaxis:false,marker:{size:[],opacity:0.45,color:[]},customdata:[]};
   const top={type:'scatter',mode:'markers+text',x:[],y:[],text:[],hovertext:[],hovertemplate:'%{hovertext}<extra></extra>',cliponaxis:false,textposition:[],textfont:{family:'JetBrains Mono',size:10,color:tok('--t1')},marker:{size:[],opacity:1,color:[],line:{width:1.4,color:'#fff'}},customdata:[]};
-  const TPOS=['middle right','top right','bottom right'];   // staggered anchors so near-equal leaders do not collide
+  const TPOS=['middle right','top right','bottom right'];   // staggered anchors so near-equal names do not collide
+  // Adaptive labelling: label from the best name down, placing each label only
+  // where it fits — a sparse (filtered) board labels every name, a dense one
+  // labels what the space allows. Label width is estimated in data units from
+  // the rendered plot width.
+  const contW=($('#cLeaders').clientWidth||1400);
+  const innerPx=Math.max(300,contW-172-36);
+  const dataPerPx=((xmax+0.17*span)-(xmin-0.07*span))/innerPx;
+  const MAXL=14;
   secs.forEach(s=>{
     const rs=[...by[s]].sort((a,b)=>b.upside_per_vol-a.upside_per_vol);
-    rs.forEach((r,i)=>{
-      const t=i<3?top:base;
+    const slotLast=[Infinity,Infinity,Infinity];   // rightmost occupied x per stagger anchor
+    let placed=0;
+    rs.forEach(r=>{
+      let slot=-1;
+      if(placed<MAXL){
+        const w=(r.ticker.length+2)*6.2*dataPerPx;
+        for(let k=0;k<3&&slot<0;k++){
+          const cand=(placed+k)%3;
+          if(r.upside_per_vol+w<=slotLast[cand])slot=cand;
+        }
+      }
+      const t=slot>=0?top:base;
       t.x.push(r.upside_per_vol);t.y.push(label[s]);t.customdata.push(r.ticker);
       t.marker.size.push(dotSize(r.mktcap_b));
       t.marker.color.push(ssColor(r.smart_score!=null?r.smart_score:5));
-      if(i<3){t.text.push(' '+r.ticker);t.hovertext.push(hov(r));t.textposition.push(TPOS[i]);}
+      if(slot>=0){t.text.push(' '+r.ticker);t.hovertext.push(hov(r));t.textposition.push(TPOS[slot]);
+        slotLast[slot]=r.upside_per_vol;placed++;}
       else{t.text.push(hov(r));}
     });
   });
