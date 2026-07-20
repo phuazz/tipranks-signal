@@ -619,7 +619,7 @@ function buildChips(){
     +'<span class="lab" style="margin-left:14px">Action</span>'
     +[['','Any'],['up','▲ this week'],['down','▼ this week']].map(x=>`<button class="chipbtn actb${x[0]===''?' on':''}" data-a="${x[0]}" title="Only names where analysts acted this week (see the Action column)">${x[1]}</button>`).join('')
     +'<span class="lab" style="margin-left:14px">Lens</span>'
-    +`<button class="chipbtn lensb on" data-l="1" title="Hides names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, or net insider selling, or Smart Score ≤ 4. View-only and ungraded — the graded schemes are frozen in the memo.">Hide trap profiles</button>`;
+    +`<button class="chipbtn lensb on" data-l="1" title="Hides names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, or net insider selling, or Smart Score ≤ 4. View-only and ungraded — the graded schemes are frozen in the memo. Note: mega-caps often fail the insider condition through routine programmed executive selling, and the price condition is relative — toggle this off to see the largest names.">Hide trap profiles</button>`;
   const onChip=e=>{const b=e.target.closest('.chipbtn');if(!b)return;
     if(b.dataset.s!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.sectors.add(b.dataset.s);else SEL.sectors.delete(b.dataset.s);}
     else if(b.dataset.i!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.idx.add(b.dataset.i);else SEL.idx.delete(b.dataset.i);}
@@ -676,7 +676,9 @@ function renderTable(){
     if((da==null)!==(db==null))return da==null?1:-1;
     const ux=a.upside_per_vol,uy=b.upside_per_vol;
     return uy==null?-1:ux==null?1:uy-ux;});
-  $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${lensHidden} trap-profile hidden`:'');
+  const hiddenMatch=q&&!rows.length&&D.table.some(qf);
+  $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${lensHidden} trap-profile hidden`:'')
+    +(hiddenMatch?' · matches exist but are hidden by the lens or chips — loosen them to see the name':'');
   $('#tbl tbody').innerHTML=rows.slice(0,600).map(r=>{
     const ssc=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
     const up=v=>v==null?'—':`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;
