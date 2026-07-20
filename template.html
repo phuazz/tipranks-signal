@@ -182,20 +182,20 @@ tbody tr{cursor:pointer}
   <div class="pane active" id="pane-panel">
     <div class="kpi-strip" id="kpis"></div>
     <div class="grid">
-      <div class="card"><h3>Board leaders — top 5 by upside ÷ vol</h3><div class="cap">Lens-passed names on the ex-ante Sharpe-like scale · bar length = upside ÷ vol vs the leader · bar colour = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · click a row for its chart.</div><div id="sbLead"></div></div>
-      <div class="card"><h3>Freshest strong names — top 5 by rating recency</h3><div class="cap">Newest analyst action among lens-passed names with above-median upside ÷ vol — the closest proxy to the revision signal until snapshot 2 · bars as at left: length = upside ÷ vol, colour = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · click a row for its chart.</div><div id="sbFresh"></div></div>
+      <div class="card"><h3>Board leaders — top 5 by upside ÷ vol</h3><div class="cap">Screen-passed names on the ex-ante Sharpe-like scale · bar length = upside ÷ vol vs the leader · bar colour = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · click a row for its chart.</div><div id="sbLead"></div></div>
+      <div class="card"><h3>Freshest strong names — top 5 by rating recency</h3><div class="cap">Newest analyst action among screen-passed names with above-median upside ÷ vol — the closest proxy to the revision signal until snapshot 2 · bars as at left: length = upside ÷ vol, colour = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · click a row for its chart.</div><div id="sbFresh"></div></div>
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Sector leaders — who looks attractive, and by how much</h3>
       <div class="cap"><b>Position</b> = best-analyst upside per unit of annualised volatility — reads like an ex-ante Sharpe ratio on the ~12-month target, before the realisation haircut (0 = no implied upside) · <b>dot size</b> = market cap · <b>colour</b> = Smart Score <span class="ss-legend">1<span class="ss-grad"></span>10</span> · names are labelled wherever they fit — every dot in a sparse (filtered) view, the leaders first in a dense one · sectors ordered by their best name, filtered count in brackets. The chips below filter this board and the panel table together. Hover for the analyst detail; click any dot for its price chart.</div>
-      <div class="note" style="margin:6px 0 10px;font-size:11.5px"><b>Caveats from the literature (details on the Literature tab):</b> analysts realise roughly 16–18 cents per dollar of claimed upside — read position as direction, not forecast. A far-right dot that got there through a recent price fall is usually a <em>stale target mean-reverting down to price</em>, not conviction; the trap gate removes the worst, and the chart click is the check for the rest. Implied upside compares reliably <b>within a row</b> — cross-sector comparison stands on weaker evidence (Da &amp; Schaumburg). Analyst-implied and ungraded throughout.</div>
+      <div class="note" style="margin:6px 0 10px;font-size:11.5px"><b>Caveats from the literature (details on the Literature tab):</b> analysts realise roughly 16–18 cents per dollar of claimed upside — read position as direction, not forecast. A far-right dot that got there through a recent price fall is usually a <em>stale target mean-reverting down to price</em>, not conviction; the value-trap screen removes the worst, and the chart click is the check for the rest. Implied upside compares reliably <b>within a row</b> — cross-sector comparison stands on weaker evidence (Da &amp; Schaumburg). Analyst-implied and ungraded throughout.</div>
       <div class="chiprow" id="secChips"></div>
       <div class="chiprow" id="qChips"></div>
       <div id="cLeaders" class="chart" style="height:470px"></div>
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Liquid universe — the panel</h3>
-      <div class="cap"><b>Action — the default order — answers one question per name: what did analysts do about this stock since last week?</b> <span class="pos" style="font-weight:700">▲</span> they moved in its favour — upgraded the consensus, raised the best-analyst price target, or lifted the composite score · <span class="neg" style="font-weight:700">▼</span> they moved against it · <span style="color:var(--t4)">·</span> they did nothing. The number says how much happened at once and how verifiable it is: <b>±9–10 strong</b> — rating change and target change together, verified by a dated rating inside the week (the week's strongest cluster) · <b>±4–8 clear</b> — one meaningful action · <b>±1–3 faint</b> — only the composite ticked, or no dated rating backs the move. It measures <em>action, not quality</em>: a strong company where analysts did nothing this week scores 0 and sinks down this table. Why it leads: changes in analyst opinion are the one signal in this data with published evidence behind it — levels are already priced in. Hover a badge for that name's own story, click the row for the full profile; exact weights sit in the column tooltip and the whole window on the Revision Monitor tab. Ties break by rating freshness, then upside ÷ vol. <b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — proprietary weights, 10 most bullish; a column and a filter here, not the order, because levels are the weakest evidence layer. <b>Hide trap profiles</b> removes names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — view-only, ungraded. Details on the Literature tab.</div>
+      <div class="cap"><b>Action — the default order — answers one question per name: what did analysts do about this stock since last week?</b> <span class="pos" style="font-weight:700">▲</span> they moved in its favour — upgraded the consensus, raised the best-analyst price target, or lifted the composite score · <span class="neg" style="font-weight:700">▼</span> they moved against it · <span style="color:var(--t4)">·</span> they did nothing. The number says how much happened at once and how verifiable it is: <b>±9–10 strong</b> — rating change and target change together, verified by a dated rating inside the week (the week's strongest cluster) · <b>±4–8 clear</b> — one meaningful action · <b>±1–3 faint</b> — only the composite ticked, or no dated rating backs the move. It measures <em>action, not quality</em>: a strong company where analysts did nothing this week scores 0 and sinks down this table. Why it leads: changes in analyst opinion are the one signal in this data with published evidence behind it — levels are already priced in. Hover a badge for that name's own story, click the row for the full profile; exact weights sit in the column tooltip and the whole window on the Revision Monitor tab. Ties break by rating freshness, then upside ÷ vol. <b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — proprietary weights, 10 most bullish; a column and a filter here, not the order, because levels are the weakest evidence layer. <b>Value-trap screen</b> (On by default) hides names whose high implied upside sits on the classic trap shape: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — view-only, ungraded. Details on the Literature tab.</div>
       <div class="tbl-tools">
         <input id="filter" placeholder="Filter ticker / company / sector…">
         <span class="hint" id="tblHint">—</span>
@@ -274,12 +274,12 @@ tbody tr{cursor:pointer}
   <div class="pane" id="pane-lit">
     <div class="note" style="margin-top:0"><b>The research map behind the design.</b> What the analyst-signal literature actually supports, and how each finding is wired into the frozen framework. This tab informs design and display only — it grades nothing. The five registered schemes in <span class="mono">RESEARCH_MEMO.md</span> are the only graded objects; additions cost a dated register row.</div>
     <div class="card lit-card">
-      <h3>How to read the panel — the lens order</h3>
+      <h3>How to read the panel — the screen order</h3>
       <div class="cap">The view-layer organisation the evidence supports, applied in the Liquid Universe table. Ungraded by construction.</div>
       <ul>
         <li><b>1 · Gate the traps first.</b> Hide price-falling names (3-month TR below the universe median), negative insider signals, and Smart Score ≤ 4. High implied upside on that profile is usually a stale target on a deteriorating name, not a buy. <span class="hook">S3 gate logic</span></li>
-        <li><b>2 · Rank within sector, not across the market.</b> Implied upside carries information only relative to sector peers, so the default sort is the sector-relative percentile of best-analyst upside per unit of volatility (Best↑/σ). <span class="hook">view lens</span></li>
-        <li><b>3 · From snapshot 2, freshness takes over.</b> Week-on-week upgrades and best-analyst target raises become the primary sort; the levels-based lens above is only the best available interim ordering while one capture exists. <span class="hook">S1a · S1b</span></li>
+        <li><b>2 · Rank within sector, not across the market.</b> Implied upside carries information only relative to sector peers, so the default sort is the sector-relative percentile of best-analyst upside per unit of volatility (Best↑/σ). <span class="hook">view screen</span></li>
+        <li><b>3 · From snapshot 2, freshness takes over.</b> Week-on-week upgrades and best-analyst target raises become the primary sort; the levels-based screen above is only the best available interim ordering while one capture exists. <span class="hook">S1a · S1b</span></li>
         <li><b>4 · Sectors: watch revision breadth, not level.</b> Net upgrades and target-raise share by sector (staged on the Revision Monitor). Sector mean Smart Score is a levels read and carries little. <span class="hook">diagnostic</span></li>
       </ul>
     </div>
@@ -299,7 +299,7 @@ tbody tr{cursor:pointer}
           <li><span class="src"><a href="https://webuser.bus.umich.edu/rlehavy/BL.pdf" target="_blank" rel="noopener">Brav &amp; Lehavy (2003), <em>Journal of Finance</em></a>.</span> Target-price <b>revisions</b> move prices — information events even conditional on the rating. <span class="hook">S1b</span></li>
           <li><span class="src">Da &amp; Schaumburg (2011), <em>Journal of Financial Markets</em>.</span> Target-implied upside predicts <b>within sector</b>, not across the market; the sector-neutral construction earned ~2%/month over 1999–2004 — an in-sample-era upper bound. <span class="hook">sector-relative rank</span></li>
           <li><span class="src"><a href="https://publications.aaahq.org/accounting-review/article-abstract/95/6/125/4230" target="_blank" rel="noopener">Dechow &amp; You (2020), <em>The Accounting Review</em></a>.</span> The largest component of implied returns is analyst error about risk; roughly 16–18 cents per dollar of implied upside is realised, and only on claimed undervaluation. <span class="hook">raw upside never a sort key</span></li>
-          <li><span class="src"><a href="https://www.sciencedirect.com/science/article/abs/pii/S1386418121000562" target="_blank" rel="noopener">“Betting against analyst target price” (2021), <em>Journal of Financial Markets</em></a>.</span> The highest-implied-return names underperform — the optimism tail inverts. <span class="hook">trap gate</span></li>
+          <li><span class="src"><a href="https://www.sciencedirect.com/science/article/abs/pii/S1386418121000562" target="_blank" rel="noopener">“Betting against analyst target price” (2021), <em>Journal of Financial Markets</em></a>.</span> The highest-implied-return names underperform — the optimism tail inverts. <span class="hook">value-trap screen</span></li>
           <li><span class="src"><a href="https://pubsonline.informs.org/doi/10.1287/mnsc.2021.03549" target="_blank" rel="noopener">Dispersion and consensus targets, <em>Management Science</em></a>.</span> Implied returns predict when analyst disagreement is low and invert when it is high. <span class="hook">B−C gap column</span></li>
         </ul>
       </div>
@@ -399,7 +399,7 @@ function kpis(){
   $('#kpis').innerHTML = [
     ['Liquid universe', k.n_liquid, `${u.sp500} S&P 500 · ${u.sp400} MidCap 400 · matched ${u.matched}/${u.snapshot_total} of the export`],
     ['Panel skew — why we rank', k.pct_buy+'% buy', `median upside ${pct(k.median_upside)} · levels do not differentiate — rank within sector`],
-    ['Pass the trap lens', `${pass.length} of ${k.n_liquid}`, 'price / insider / score gate — view-only, ungraded']
+    ['Pass the value-trap screen', `${pass.length} of ${k.n_liquid}`, 'price / insider / score conditions — view-only, ungraded']
   ].map(r=>`<div class="kpi"><div class="kpi-lab">${r[0]}</div><div class="kpi-val">${r[1]}</div><div class="kpi-sub">${r[2]}</div></div>`).join('');
   const maxUV=uv.length?uv[0].upside_per_vol:1;
   const row=(r,val,ctx)=>{const w=Math.max(4,Math.round(100*(r.upside_per_vol||0)/maxUV));
@@ -520,10 +520,10 @@ function openChart(t){
   $('#chMeta').textContent='loading…';
   $('#chartOvl').classList.add('open');
   Plotly.purge('cPrice');
-  if(!r.chart){$('#chMeta').textContent='No chart built for this name — price files are pre-built for lens-passed names only (re-run build_dashboard.py after a capture to refresh).';return;}
+  if(!r.chart){$('#chMeta').textContent='No chart built for this name — price files are pre-built for screen-passed and strongly-revised names (re-run build_dashboard.py after a capture to refresh).';return;}
   if(window.__EXPORT_PRICES__){
     const h=window.__EXPORT_PRICES__[t.replace('/','-')];
-    if(h)renderPrice(r,h); else $('#chMeta').textContent='Chart not included in this export (price series are pre-built for lens-passed names only).';
+    if(h)renderPrice(r,h); else $('#chMeta').textContent='Chart not included in this export (price series are pre-built for screen-passed and strongly-revised names).';
     return;
   }
   fetch('data/dashboard/prices/'+encodeURIComponent(t.replace('/','-'))+'.json')
@@ -582,12 +582,12 @@ const COLS=[
   ['best_consensus','Best analysts','l','Consensus of top-ranked analysts only'],
   ['upside','Target upside','r','All-analyst consensus price target vs the current price'],
   ['best_upside','Best upside','r','Best-analyst price target vs the current price'],
-  ['tr_3m','3-mo ret','r','Total return over the trailing 63 sessions; the lens hides names below the universe median'],
+  ['tr_3m','3-mo ret','r','Total return over the trailing 63 sessions; the value-trap screen hides names below the universe median'],
   ['vol_ann','Vol %','r','Annualised daily volatility over the same ~3-month window'],
   ['upside_per_vol','Upside ÷ vol','r','Best-analyst upside per unit of annualised volatility — target distance in years of risk'],
   ['sector_pct','Sector rank','r','Percentile of Upside ÷ vol within the sector (100 = most upside per unit of risk among peers). Upside ranks within sector, not across the market'],
   ['bvc_gap','B−C gap','r','Best-analyst target vs the consensus target, %; a wide gap means analyst disagreement, when consensus targets are least reliable'],
-  ['insider','Insider','r','TipRanks insider signal; Negative is hidden by the lens'],
+  ['insider','Insider','r','TipRanks insider signal; Negative is hidden by the value-trap screen (mega-caps trip this through routine programmed selling)'],
   ['div_yield','Yld %','r','Trailing dividend yield, % (style control, not a signal)'],
   ['mktcap_b','Cap $B','r','Market capitalisation, USD billions']
 ];
@@ -618,12 +618,12 @@ function buildChips(){
     +[[0,'All'],[50,'Top 50'],[100,'Top 100'],[250,'Top 250']].map(x=>`<button class="chipbtn capb${x[0]===0?' on':''}" data-c="${x[0]}" title="Keep only the X largest names by market capitalisation, applied after the other filters">${x[1]}</button>`).join('')
     +'<span class="lab" style="margin-left:14px">Action</span>'
     +[['','Any'],['up','▲ this week'],['down','▼ this week']].map(x=>`<button class="chipbtn actb${x[0]===''?' on':''}" data-a="${x[0]}" title="Only names where analysts acted this week (see the Action column)">${x[1]}</button>`).join('')
-    +'<span class="lab" style="margin-left:14px">Lens</span>'
-    +`<button class="chipbtn lensb on" data-l="1" title="Hides names whose high implied upside sits on a deteriorating profile: 3-month return below the universe median, or net insider selling, or Smart Score ≤ 4. View-only and ungraded — the graded schemes are frozen in the memo. Note: mega-caps often fail the insider condition through routine programmed executive selling, and the price condition is relative — toggle this off to see the largest names.">Hide trap profiles</button>`;
+    +'<span class="lab" style="margin-left:14px">Value-trap screen</span>'
+    +[[1,'On'],[0,'Off']].map(x=>`<button class="chipbtn lensb${x[0]===1?' on':''}" data-l="${x[0]}" title="On hides names whose big implied upside sits on the classic value-trap shape: price in the bottom half of the universe over 3 months, or net insider selling, or Smart Score ≤ 4. It screens the shape, not the company — mega-caps often trip the insider test through routine programmed executive selling, and the price test is relative; Off shows every name. View-only and ungraded.">${x[1]}</button>`).join('');
   const onChip=e=>{const b=e.target.closest('.chipbtn');if(!b)return;
     if(b.dataset.s!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.sectors.add(b.dataset.s);else SEL.sectors.delete(b.dataset.s);}
     else if(b.dataset.i!==undefined){b.classList.toggle('on');if(b.classList.contains('on'))SEL.idx.add(b.dataset.i);else SEL.idx.delete(b.dataset.i);}
-    else if(b.dataset.l!==undefined){b.classList.toggle('on');SEL.lens=b.classList.contains('on');}
+    else if(b.dataset.l!==undefined){SEL.lens=b.dataset.l==='1';document.querySelectorAll('#qChips .lensb').forEach(x=>x.classList.toggle('on',(x.dataset.l==='1')===SEL.lens));}
     else if(b.dataset.c!==undefined){SEL.topCap=+b.dataset.c;document.querySelectorAll('#qChips .capb').forEach(x=>x.classList.toggle('on',+x.dataset.c===SEL.topCap));}
     else if(b.dataset.a!==undefined){SEL.action=b.dataset.a;document.querySelectorAll('#qChips .actb').forEach(x=>x.classList.toggle('on',x.dataset.a===SEL.action));}
     else{SEL.minScore=+b.dataset.m;document.querySelectorAll('#qChips .scoreb').forEach(x=>x.classList.toggle('on',+x.dataset.m===SEL.minScore));}
@@ -647,12 +647,12 @@ function whyProfile(r){
   if(d!=null&&d<=30)good.push(`fresh rating, ${d}d ago`);
   if(d!=null&&d>30)warn.push(`last rating ${d} days old — wide upside may be a stale target mean-reverting to price`);
   if(r.smart_score!=null&&r.smart_score<=4)warn.push(`Smart Score ${r.smart_score} — weak composite`);
-  if(r.tr_3m!=null&&r.tr_3m<0)warn.push(`price falling, ${r.tr_3m.toFixed(1)}% over 3 months, against a bullish target — trap profile`);
+  if(r.tr_3m!=null&&r.tr_3m<0)warn.push(`price falling, ${r.tr_3m.toFixed(1)}% over 3 months, against a bullish target — the value-trap shape`);
   if(r.insider==='Negative')warn.push('net insider selling');
   if(/bearish/i.test(r.news||''))warn.push(`news sentiment ${r.news}`);
   if(/negative/i.test(r.investor||''))warn.push(`individual-investor sentiment ${r.investor}`);
   if(r.bvc_gap!=null&&Math.abs(r.bvc_gap)>=10)warn.push(`best-vs-consensus gap ${(r.bvc_gap>=0?'+':'')+r.bvc_gap.toFixed(1)}% — analyst disagreement, when targets are least reliable`);
-  if(!r.lens_pass)warn.push('fails the trap lens');
+  if(!r.lens_pass)warn.push('fails the value-trap screen');
   const gl=`<div class="wp-line"><span class="wp-good">✓ Screens well on:</span>${good.length?good.join(' · '):'nothing stands out this week'}</div>`;
   const wl=warn.length?`<div class="wp-line"><span class="wp-warn">⚠ Caveats:</span>${warn.join(' · ')}</div>`:'';
   const revLine=r.rev_rank?`<div class="wp-line"><span class="${r.rev_rank>0?'wp-good':'wp-warn'}">${r.rev_rank>0?'▲':'▼'} Analyst action this week — ${actionTier(r.rev_rank)} (${(r.rev_rank>0?'+':'')+r.rev_rank} of ±10):</span>${r.rev_note||''} <span style="color:var(--t4)">· a verified rating change outweighs a target change, which outweighs a composite tick</span></div>`:'';
@@ -677,8 +677,8 @@ function renderTable(){
     const ux=a.upside_per_vol,uy=b.upside_per_vol;
     return uy==null?-1:ux==null?1:uy-ux;});
   const hiddenMatch=q&&!rows.length&&D.table.some(qf);
-  $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${lensHidden} trap-profile hidden`:'')
-    +(hiddenMatch?' · matches exist but are hidden by the lens or chips — loosen them to see the name':'');
+  $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${lensHidden} screened out (value-trap shapes)`:'')
+    +(hiddenMatch?' · matches exist but are hidden by the value-trap screen or the chips — loosen them to see the name':'');
   $('#tbl tbody').innerHTML=rows.slice(0,600).map(r=>{
     const ssc=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
     const up=v=>v==null?'—':`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;

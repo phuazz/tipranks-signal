@@ -88,7 +88,8 @@ def _pair_counts(prev, curr):
             else:
                 dn += 1; cd += 1 if confirmed else 0; d["down"] += 1
         bt_p, bt_n = p.get("best_analyst_price_target"), r.get("best_analyst_price_target")
-        if bt_p and bt_n and abs(bt_n - bt_p) > 0.01:
+        # de-minimis floor mirrors build_dashboard.py: moves < 0.25% are noise
+        if bt_p and bt_n and abs(bt_n / bt_p - 1.0) >= 0.0025:
             chg = round((bt_n / bt_p - 1.0) * 100.0, 2)
             if chg > 0:
                 raises.append(chg); raises_conf += 1 if confirmed else 0; d["raise"] += 1

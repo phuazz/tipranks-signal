@@ -194,13 +194,15 @@ def main() -> int:
                 label_dir = 1 if rank[nc] < rank[pc] else -1
             rd = _parse_rating_date(r.get("last_rating_date"))
             confirmed = rd is not None and prev_asof < rd <= now_asof
+            # de-minimis floor: a target move counts only at >= 0.25% of the prior
+            # level -- deliberate analyst changes are >= ~1%; penny wiggles are noise
             bt_p, bt_n = p.get("best_analyst_price_target"), r.get("best_analyst_price_target")
             bt_pct = None
-            if bt_p and bt_n and abs(bt_n - bt_p) > 0.01:
+            if bt_p and bt_n and abs(bt_n / bt_p - 1.0) >= 0.0025:
                 bt_pct = round((bt_n / bt_p - 1.0) * 100.0, 2)
             ct_p, ct_n = p.get("analyst_price_target"), r.get("analyst_price_target")
             ct_pct = None
-            if ct_p and ct_n and abs(ct_n - ct_p) > 0.01:
+            if ct_p and ct_n and abs(ct_n / ct_p - 1.0) >= 0.0025:
                 ct_pct = round((ct_n / ct_p - 1.0) * 100.0, 2)
             ss_p, ss_n = p.get("smart_score"), r.get("smart_score")
             ss_d = (ss_n - ss_p) if (ss_p is not None and ss_n is not None and ss_n != ss_p) else None
