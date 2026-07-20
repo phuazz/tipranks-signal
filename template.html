@@ -71,7 +71,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.
 
 /* table */
 .tbl-tools{display:flex;gap:10px;align-items:center;margin:6px 0 10px;flex-wrap:wrap}
-.tbl-tools input{font-family:var(--sans);font-size:13px;padding:7px 11px;border:1px solid var(--bd2);border-radius:var(--radius);background:var(--bg2);min-width:220px}
+.tbl-tools input,.chiprow input{font-family:var(--sans);font-size:13px;padding:7px 11px;border:1px solid var(--bd2);border-radius:var(--radius);background:var(--bg2);min-width:220px}
 .tbl-tools .hint{font-size:11.5px;color:var(--t3)}
 .tbl-wrap{overflow:auto;max-height:72vh;border:1px solid var(--bd);border-radius:var(--radius-lg);background:var(--bg2)}
 table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
@@ -193,15 +193,15 @@ tbody tr{cursor:pointer}
       <div class="note" style="margin:6px 0 10px;font-size:11.5px"><b>Caveats from the literature (details on the Literature tab):</b> analysts realise roughly 16–18 cents per dollar of claimed upside — read position as direction, not forecast. A far-right dot that got there through a recent price fall is usually a <em>stale target mean-reverting down to price</em>, not conviction; the value-trap screen removes the worst, and the chart click is the check for the rest. Implied upside compares reliably <b>within a row</b> — cross-sector comparison stands on weaker evidence (Da &amp; Schaumburg). Analyst-implied and ungraded throughout.</div>
       <div class="chiprow" id="secChips"></div>
       <div class="chiprow" id="qChips"></div>
+      <div class="chiprow"><input id="filter" placeholder="Find any name — ticker, company or sector (bypasses screen and chips)…" style="min-width:330px"><span class="hint" id="tblHint">—</span></div>
+      <div class="cap" style="margin:2px 0 8px"><b>What is a value trap?</b> A stock that looks cheap only because analyst targets have not caught up with a falling price — big claimed upside on a deteriorating reality. The screen hides that shape (price in the bottom half of the universe over 3 months, or net insider selling, or Smart Score ≤ 4). It judges the <em>shape, not the company</em> — mega-caps often trip the insider test through routine programmed selling — and the search box overrides it: a searched name always appears, dimmed in the table and red-ringed on the board, with the reason on hover.</div>
       <div id="cLeaders" class="chart" style="height:470px"></div>
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Liquid universe — the panel</h3>
       <div class="cap"><b>Action — the default order — answers one question per name: what did analysts do about this stock since last week?</b> <span class="pos" style="font-weight:700">▲</span> they moved in its favour — upgraded the consensus, raised the best-analyst price target, or lifted the composite score · <span class="neg" style="font-weight:700">▼</span> they moved against it · <span style="color:var(--t4)">·</span> they did nothing. The number says how much happened at once and how verifiable it is: <b>±9–10 strong</b> — rating change and target change together, verified by a dated rating inside the week (the week's strongest cluster) · <b>±4–8 clear</b> — one meaningful action · <b>±1–3 faint</b> — only the composite ticked, or no dated rating backs the move. It measures <em>action, not quality</em>: a strong company where analysts did nothing this week scores 0 and sinks down this table. Why it leads: changes in analyst opinion are the one signal in this data with published evidence behind it — levels are already priced in. Hover a badge for that name's own story, click the row for the full profile; exact weights sit in the column tooltip and the whole window on the Revision Monitor tab. Ties break by rating freshness, then upside ÷ vol. <b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — proprietary weights, 10 most bullish; a column and a filter here, not the order, because levels are the weakest evidence layer. <b>Value-trap screen</b> (On by default; the search box bypasses it and shows screened names dimmed) hides names whose high implied upside sits on the classic trap shape: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — view-only, ungraded. Details on the Literature tab.</div>
       <div class="tbl-tools">
-        <input id="filter" placeholder="Filter ticker / company / sector…">
-        <span class="hint" id="tblHint">—</span>
-        <span class="hint">· click a row for its price chart · hover a header for definitions · the sector / score / index / cap / action chips on the board above filter this table too</span>
+        <span class="hint">· click a row for its price chart · hover a header for definitions · the search box and chips on the board above drive this table too</span>
       </div>
       <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
     </div>
@@ -448,8 +448,10 @@ function chartSent(){
 }
 
 function chartLeaders(){
-  const rows=filteredRows().filter(r=>r.upside_per_vol!=null);
-  if(!rows.length){Plotly.purge('cLeaders');$('#cLeaders').innerHTML='<div class="hint" style="padding:36px 8px">No names pass the current filter combination — loosen a chip above.</div>';return;}
+  const q=(($('#filter')||{}).value||'').toLowerCase();
+  const qf=r=>!q||(r.ticker+' '+(r.company||'')+' '+(r.sector||'')).toLowerCase().includes(q);
+  const rows=(q?D.table.filter(qf):filteredRows()).filter(r=>r.upside_per_vol!=null);
+  if(!rows.length){Plotly.purge('cLeaders');$('#cLeaders').innerHTML='<div class="hint" style="padding:36px 8px">'+(q?'No name matches the search.':'No names pass the current filter combination — loosen a chip above.')+'</div>';return;}
   const by={};rows.forEach(r=>{const s=r.sector||'—';(by[s]=by[s]||[]).push(r);});
   const label={};Object.keys(by).forEach(s=>{label[s]=`${s} (${by[s].length})`;});
   const secs=Object.keys(by).sort((a,b)=>Math.max(...by[b].map(r=>r.upside_per_vol))-Math.max(...by[a].map(r=>r.upside_per_vol)));
@@ -461,10 +463,10 @@ function chartLeaders(){
   const hov=r=>{
     const who=[r.most_accurate?`most accurate: ${r.most_accurate}`:null,
                r.most_profitable?`most profitable: ${r.most_profitable}`:null].filter(Boolean).join(' · ');
-    return `<b>${r.ticker}</b> ${r.company||''}<br>best upside ${pct(r.best_upside)} on vol ${fmt(r.vol_ann,0)}% → ${r.upside_per_vol.toFixed(2)}<br>3-mo ${pct(r.tr_3m)} · Score ${r.smart_score!=null?r.smart_score:'—'} · $${fmt(r.mktcap_b,1)}B cap · sector rank ${r.sector_pct!=null?r.sector_pct:'—'}<br>best analysts: ${r.best_consensus||'—'} · last rating ${r.last_rating||'—'}`+(who?`<br>${who}`:'')+`<br><i>click for price chart ↗</i>`;
+    return `<b>${r.ticker}</b> ${r.company||''}<br>best upside ${pct(r.best_upside)} on vol ${fmt(r.vol_ann,0)}% → ${r.upside_per_vol.toFixed(2)}<br>3-mo ${pct(r.tr_3m)} · Score ${r.smart_score!=null?r.smart_score:'—'} · $${fmt(r.mktcap_b,1)}B cap · sector rank ${r.sector_pct!=null?r.sector_pct:'—'}<br>best analysts: ${r.best_consensus||'—'} · last rating ${r.last_rating||'—'}`+(who?`<br>${who}`:'')+(r.lens_pass?'':'<br>⚠ fails the value-trap screen')+`<br><i>click for price chart ↗</i>`;
   };
   const base={type:'scatter',mode:'markers',x:[],y:[],text:[],hovertemplate:'%{text}<extra></extra>',cliponaxis:false,marker:{size:[],opacity:0.45,color:[]},customdata:[]};
-  const top={type:'scatter',mode:'markers+text',x:[],y:[],text:[],hovertext:[],hovertemplate:'%{hovertext}<extra></extra>',cliponaxis:false,textposition:[],textfont:{family:'JetBrains Mono',size:10,color:tok('--t1')},marker:{size:[],opacity:1,color:[],line:{width:1.4,color:'#fff'}},customdata:[]};
+  const top={type:'scatter',mode:'markers+text',x:[],y:[],text:[],hovertext:[],hovertemplate:'%{hovertext}<extra></extra>',cliponaxis:false,textposition:[],textfont:{family:'JetBrains Mono',size:10,color:tok('--t1')},marker:{size:[],opacity:1,color:[],line:{width:[],color:[]}},customdata:[]};
   const TPOS=['middle right','top right','bottom right'];   // staggered anchors so near-equal names do not collide
   // Adaptive labelling: label from the best name down, placing each label only
   // where it fits — a sparse (filtered) board labels every name, a dense one
@@ -492,6 +494,7 @@ function chartLeaders(){
       t.marker.size.push(dotSize(r.mktcap_b));
       t.marker.color.push(ssColor(r.smart_score!=null?r.smart_score:5));
       if(slot>=0){t.text.push(' '+r.ticker);t.hovertext.push(hov(r));t.textposition.push(TPOS[slot]);
+        t.marker.line.width.push(r.lens_pass?1.4:2);t.marker.line.color.push(r.lens_pass?'#fff':tok('--r'));
         slotLast[slot]=r.upside_per_vol;placed++;}
       else{t.text.push(hov(r));}
     });
@@ -785,7 +788,7 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   t.classList.add('active'); $('#pane-'+t.dataset.pane).classList.add('active');
   window.dispatchEvent(new Event('resize'));
 }));
-$('#filter').addEventListener('input',renderTable);
+$('#filter').addEventListener('input',()=>{renderTable();chartLeaders();});
 $('#chClose').addEventListener('click',closeChart);
 $('#chartOvl').addEventListener('click',e=>{if(e.target.id==='chartOvl')closeChart();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart();});
