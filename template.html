@@ -111,6 +111,8 @@ tbody tr:hover td:first-child{background:var(--bg-hover)}
 tbody td{padding:7px 7px;text-align:right;border-bottom:1px solid var(--bd);font-family:var(--mono)}
 tbody td.l{text-align:left;font-family:var(--sans)}
 tbody tr:hover{background:var(--bg-hover)}
+tbody tr.dimrow{opacity:0.5}
+tbody tr.dimrow:hover{opacity:0.85}
 .tk{font-weight:700;color:var(--t1)}
 .co{color:var(--t2);font-size:11.5px}
 .chip{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px}
@@ -195,7 +197,7 @@ tbody tr{cursor:pointer}
     </div>
     <div class="card" style="margin-bottom:16px">
       <h3>Liquid universe — the panel</h3>
-      <div class="cap"><b>Action — the default order — answers one question per name: what did analysts do about this stock since last week?</b> <span class="pos" style="font-weight:700">▲</span> they moved in its favour — upgraded the consensus, raised the best-analyst price target, or lifted the composite score · <span class="neg" style="font-weight:700">▼</span> they moved against it · <span style="color:var(--t4)">·</span> they did nothing. The number says how much happened at once and how verifiable it is: <b>±9–10 strong</b> — rating change and target change together, verified by a dated rating inside the week (the week's strongest cluster) · <b>±4–8 clear</b> — one meaningful action · <b>±1–3 faint</b> — only the composite ticked, or no dated rating backs the move. It measures <em>action, not quality</em>: a strong company where analysts did nothing this week scores 0 and sinks down this table. Why it leads: changes in analyst opinion are the one signal in this data with published evidence behind it — levels are already priced in. Hover a badge for that name's own story, click the row for the full profile; exact weights sit in the column tooltip and the whole window on the Revision Monitor tab. Ties break by rating freshness, then upside ÷ vol. <b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — proprietary weights, 10 most bullish; a column and a filter here, not the order, because levels are the weakest evidence layer. <b>Value-trap screen</b> (On by default) hides names whose high implied upside sits on the classic trap shape: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — view-only, ungraded. Details on the Literature tab.</div>
+      <div class="cap"><b>Action — the default order — answers one question per name: what did analysts do about this stock since last week?</b> <span class="pos" style="font-weight:700">▲</span> they moved in its favour — upgraded the consensus, raised the best-analyst price target, or lifted the composite score · <span class="neg" style="font-weight:700">▼</span> they moved against it · <span style="color:var(--t4)">·</span> they did nothing. The number says how much happened at once and how verifiable it is: <b>±9–10 strong</b> — rating change and target change together, verified by a dated rating inside the week (the week's strongest cluster) · <b>±4–8 clear</b> — one meaningful action · <b>±1–3 faint</b> — only the composite ticked, or no dated rating backs the move. It measures <em>action, not quality</em>: a strong company where analysts did nothing this week scores 0 and sinks down this table. Why it leads: changes in analyst opinion are the one signal in this data with published evidence behind it — levels are already priced in. Hover a badge for that name's own story, click the row for the full profile; exact weights sit in the column tooltip and the whole window on the Revision Monitor tab. Ties break by rating freshness, then upside ÷ vol. <b>Smart Score</b> is TipRanks' 1–10 composite of eight inputs — analyst consensus, blogger opinion, insider activity, hedge-fund activity, news sentiment, crowd sentiment, technicals and fundamentals — proprietary weights, 10 most bullish; a column and a filter here, not the order, because levels are the weakest evidence layer. <b>Value-trap screen</b> (On by default; the search box bypasses it and shows screened names dimmed) hides names whose high implied upside sits on the classic trap shape: 3-month return below the universe median, net insider selling, or Smart Score ≤ 4 — view-only, ungraded. Details on the Literature tab.</div>
       <div class="tbl-tools">
         <input id="filter" placeholder="Filter ticker / company / sector…">
         <span class="hint" id="tblHint">—</span>
@@ -664,8 +666,9 @@ function renderTable(){
   const q=($('#filter').value||'').toLowerCase();
   const lensOn=SEL.lens;
   const qf=r=>!q||(r.ticker+' '+(r.company||'')+' '+(r.sector||'')).toLowerCase().includes(q);
-  let rows=filteredRows().filter(qf);
-  const lensHidden=lensOn?(D.table.filter(qf).length-D.table.filter(r=>qf(r)&&r.lens_pass).length):0;
+  // searching is an explicit request for a name — it bypasses the screen and chips
+  let rows=q?D.table.filter(qf):filteredRows();
+  const lensHidden=(!q&&lensOn)?(D.table.length-D.table.filter(r=>r.lens_pass).length):0;
   rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];
     if(x==null&&y!=null)return 1;
     if(y==null&&x!=null)return -1;
@@ -676,9 +679,9 @@ function renderTable(){
     if((da==null)!==(db==null))return da==null?1:-1;
     const ux=a.upside_per_vol,uy=b.upside_per_vol;
     return uy==null?-1:ux==null?1:uy-ux;});
-  const hiddenMatch=q&&!rows.length&&D.table.some(qf);
-  $('#tblHint').textContent=`${rows.length} names`+(lensOn?` · ${lensHidden} screened out (value-trap shapes)`:'')
-    +(hiddenMatch?' · matches exist but are hidden by the value-trap screen or the chips — loosen them to see the name':'');
+  $('#tblHint').textContent=q
+    ?`${rows.length} match${rows.length===1?'':'es'} · search bypasses the chips and the screen — dimmed rows fail the value-trap screen`
+    :`${rows.length} names`+(lensOn?` · ${lensHidden} screened out (value-trap shapes)`:'');
   $('#tbl tbody').innerHTML=rows.slice(0,600).map(r=>{
     const ssc=r.smart_score!=null?`<span class="ss" style="background:${ssColor(r.smart_score)}22;color:${ssColor(r.smart_score)}">${r.smart_score}</span>`:'—';
     const up=v=>v==null?'—':`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;
@@ -688,7 +691,7 @@ function renderTable(){
       :r.rev_badge==='down'
       ?`<span class="neg" style="font-weight:700" title="${rvTitle}">▼${Math.abs(r.rev_rank)}</span>`
       :'<span style="color:var(--t4)" title="No analyst action on this name this week">·</span>';
-    return `<tr data-t="${r.ticker}"><td class="l tk">${r.ticker}${r.chart?' <span style="color:var(--t4);font-size:9px">▸</span>':''}<div class="co" style="font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${r.company||''}</div></td><td>${rb}</td><td class="l co">${r.sector||''}</td>
+    return `<tr data-t="${r.ticker}"${(!r.lens_pass&&SEL.lens)?' class="dimrow" title="Fails the value-trap screen — dimmed, not hidden, because you searched for it"':''}><td class="l tk">${r.ticker}${r.chart?' <span style="color:var(--t4);font-size:9px">▸</span>':''}<div class="co" style="font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${r.company||''}</div></td><td>${rb}</td><td class="l co">${r.sector||''}</td>
       <td>${ssc}</td><td class="l"><span class="chip ${chipCls(r.consensus)}">${r.consensus||'—'}</span></td>
       <td class="l"><span class="chip ${chipCls(r.best_consensus)}">${r.best_consensus||'—'}</span></td>
       <td>${up(r.upside)}</td><td>${up(r.best_upside)}</td>
