@@ -23,10 +23,12 @@ There is **no API** on either licence (TipRanks Ultimate, Norgate Platinum — b
 
 ## Weekly operator routine
 
-1. In TipRanks → Screeners → **Stock Screener**, load the saved screen `tipranks-signal weekly` (Market Cap = Mid+Large+Mega, US primary; the signal filters left as Any). Export (CSV or Excel) and save to `OneDrive\Main\tipranks-signal\tipranks_YYYY-MM-DD.csv`. If a future export exceeds one page, drop each page into a dated folder instead.
-2. `python scripts/ingest.py --export "C:\Users\phuaz\OneDrive\Main\tipranks-signal\tipranks_YYYY-MM-DD.csv" --asof YYYY-MM-DD`  (or pass the folder of page-files)
-3. `python scripts/merge_norgate.py --asof YYYY-MM-DD`  (NDU running)
-4. `python scripts/build_dashboard.py`  → refresh the local monitor; `python scripts/status.py` for accrual.
+1. In TipRanks → Screeners → **Stock Screener**, load the saved screen `tipranks-signal weekly` (Market Cap = Mid+Large+Mega, US primary; the signal filters left as Any). **Set Rows to the maximum before exporting** — a silently truncated export is the one failure a forward-only panel cannot undo. Export to CSV.
+2. `python scripts/capture.py --latest --asof YYYY-MM-DD` (NDU running) — one command for everything else.
+
+`capture.py` is the guard layer. It validates the export *before* anything is filed or ingested — column contract (imported from `ingest.py`, never copied), row count and ticker overlap against the prior capture, a content hash against the previous export to catch a stale re-submit, and date sanity — aborts on any failure, then files the raw CSV to OneDrive and runs ingest → feed gate → merge → dashboard → HTML export (+ OneDrive copy) → public page. Flags: `--file <path>` instead of `--latest`, `--validate-only` to run the guards alone, `--force` to overwrite a captured date, `--push` to commit and push the public aggregates. `python scripts/status.py` reports accrual.
+
+**Capture dates are the Singapore download day.** The merge anchors every name on the last US session *on or before* that date (stored per record as `anchor_date`), so a Thursday-SGT capture anchors on the Wednesday US close — the signal is observed after that close, so there is no look-ahead by construction.
 5. `python scripts/pipeline.py`  → rebuild the public aggregate page (`docs/index.html`); commit and push `docs/` to publish.
 
 A few minutes weekly. `analyse.py` runs later, once the forward windows mature.
