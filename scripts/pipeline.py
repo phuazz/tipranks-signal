@@ -30,6 +30,10 @@ SNAP_DIR = ROOT / "data" / "snapshots"
 TEMPLATE = ROOT / "public_template.html"
 OUT_HTML = ROOT / "docs" / "index.html"
 DEV_JSON = ROOT / "data" / "public" / "aggregates.json"
+MON_TEMPLATE = ROOT / "template.html"
+MON_SHELL = ROOT / "monitor_shell.html"
+MON_OUT = ROOT / "docs" / "monitor" / "index.html"
+MON_MAX_KB = 150   # code-only ceiling; an inlined panel would be several MB
 MIN_SNAPSHOTS = 8
 MATURE_DAYS = 31
 CONSENSUS_ORDER = ["Strong Buy", "Moderate Buy", "Hold", "Moderate Sell", "Strong Sell"]
@@ -110,6 +114,58 @@ def _pair_counts(prev, curr):
               "raises": d["raise"], "cuts": d["cut"]} for s, d in breadth.items()],
             key=lambda x: -x["net_upgrades"]),
     }
+
+
+def _build_monitor_shell(all_tickers: set[str]) -> str:
+    """Publish the monitor's CODE to Pages; its data stays on the operator's machine.
+
+    The monitor renders licensed per-name TipRanks / Norgate values, which can
+    never be hosted. What can be hosted is the page itself: template.html holds
+    no data at all (it fetches at runtime), so the Pages build is that template
+    plus monitor_shell.html -- a loader that reads the weekly export from local
+    disk into the browser. The same leak guard as the public page runs over the
+    output, on the same ticker universe, so this stays a build-time assertion
+    rather than a convention.
+    """
+    tpl = MON_TEMPLATE.read_text(encoding="utf-8")
+    shell = MON_SHELL.read_text(encoding="utf-8")
+
+    anchor = "<script>\nconst $ = s => document.querySelector(s);"
+    if anchor not in tpl:
+        raise SystemExit("monitor: injection anchor not found -- template.html drifted")
+    if "window.__HOSTED_SHELL__" not in tpl:
+        raise SystemExit("monitor: template.html lacks the __HOSTED_SHELL__ boot guard")
+    html = tpl.replace(anchor, shell + "\n" + anchor, 1)
+
+    # The hosted shell is an operator tool, not a publication -- keep it out of
+    # search indexes, and do not let the private-monitor title imply otherwise.
+    html = html.replace(
+        "<title>TipRanks Signal Monitor — private</title>",
+        '<title>TipRanks Signal Monitor — local data</title>\n'
+        '<meta name="robots" content="noindex, nofollow">', 1)
+
+    # --- leak guard (hard fail) ----------------------------------------------
+    # Same rule as the public page: no ticker ever seen in any merge may appear
+    # as a quoted string, and no inlined data payload may survive.
+    leaks = sorted(t for t in all_tickers if f'"{t}"' in html)
+    if leaks:
+        raise SystemExit(f"LEAK GUARD (monitor): ticker(s) in hosted shell: {leaks[:10]}")
+    # An inlined payload assigns an object/array literal; the shell's own parser
+    # markers are quoted strings, so match on the opening brace/bracket.
+    for banned in ("window.__EXPORT_DATA__={", "window.__EXPORT_DATA__=[",
+                   "window.__EXPORT_PRICES__={", "window.__EXPORT_PRICES__=["):
+        if banned in html:
+            raise SystemExit(f"LEAK GUARD (monitor): inlined payload {banned!r}")
+    # Structural tripwire: the shell is code only. Any panel or price series
+    # reaching it would blow past this long before a ticker check could miss it.
+    size_kb = len(html.encode("utf-8")) // 1024
+    if size_kb > MON_MAX_KB:
+        raise SystemExit(f"LEAK GUARD (monitor): shell is {size_kb} KB "
+                         f"(cap {MON_MAX_KB} KB) -- data may have been inlined")
+
+    MON_OUT.parent.mkdir(parents=True, exist_ok=True)
+    MON_OUT.write_text(html, encoding="utf-8")
+    return f"{MON_OUT.relative_to(ROOT)} ({size_kb} KB, no data)"
 
 
 def main() -> int:
@@ -205,10 +261,12 @@ def main() -> int:
     (OUT_HTML.parent / ".nojekyll").write_text("", encoding="utf-8")
     DEV_JSON.parent.mkdir(parents=True, exist_ok=True)
     DEV_JSON.write_text(out_json, encoding="utf-8")
+    mon = _build_monitor_shell(all_tickers)
     print(f"[pipeline] {len(weekly)} weekly rows, revision "
           f"{'ON' if latest_pair else 'pending'}; leak guard PASS "
           f"({len(all_tickers)} tickers screened) -> {OUT_HTML.relative_to(ROOT)} "
           f"({OUT_HTML.stat().st_size // 1024} KB)")
+    print(f"[pipeline] monitor shell -> {mon}")
     return 0
 
 

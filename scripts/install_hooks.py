@@ -19,6 +19,18 @@ if [ -n "$bad" ]; then
   printf '%s\\n' "$bad" >&2
   exit 1
 fi
+
+# docs/monitor/index.html is the hosted monitor SHELL -- code only, no data.
+# pipeline.py guards it at build time; this is the last check before a public
+# push. A shell carrying an inlined panel would be megabytes, not kilobytes.
+if printf '%s\\n' "$staged" | grep -q '^docs/monitor/index\\.html$'; then
+  size=$(git cat-file -s "$(git rev-parse :docs/monitor/index.html)")
+  if [ "$size" -gt 153600 ]; then
+    echo "COMMIT BLOCKED - docs/monitor/index.html is $size bytes (cap 153600)." >&2
+    echo "The hosted shell must carry no data. Rebuild with scripts/pipeline.py." >&2
+    exit 1
+  fi
+fi
 exit 0
 """
 

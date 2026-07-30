@@ -8,7 +8,8 @@ is filed or ingested, aborts on any hard failure, and only then runs the full
 weekly chain:
 
     validate -> file to OneDrive -> ingest -> feed gate -> merge
-             -> dashboard -> HTML export (+ OneDrive copy) -> public page
+             -> dashboard -> HTML export (+ OneDrive copy)
+             -> Pages build (public aggregate page + data-less monitor shell)
 
 Usage:
     python scripts/capture.py --file "C:\\Users\\phuaz\\Downloads\\export.csv" --asof 2026-07-30
@@ -210,7 +211,7 @@ def main() -> int:
     run([py, "scripts/merge_norgate.py", "--asof", asof.isoformat()], "3/6 merge")
     run([py, "scripts/build_dashboard.py"], "4/6 dashboard")
     run([py, "scripts/export_html.py"], "5/6 HTML export")
-    run([py, "scripts/pipeline.py"], "6/6 public page")
+    run([py, "scripts/pipeline.py"], "6/6 Pages build")
 
     monitor = EXPORT_DIR / f"tipranks_monitor_{asof.isoformat()}.html"
     if monitor.exists():
@@ -218,7 +219,10 @@ def main() -> int:
         print(f"\n[capture] monitor copied -> {ONEDRIVE / monitor.name}")
 
     if a.push:
-        subprocess.run(["git", "add", "docs/index.html"], cwd=ROOT, check=True)
+        # Both Pages surfaces: the aggregate page and the data-less monitor
+        # shell. The pre-commit hook is the backstop on what the shell may carry.
+        subprocess.run(["git", "add", "docs/index.html", "docs/monitor/index.html"],
+                       cwd=ROOT, check=True)
         subprocess.run(["git", "commit", "-m",
                         f"tipranks-signal: public aggregates for the {asof.isoformat()} capture"],
                        cwd=ROOT, check=True)

@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TipRanks Signal Monitor — private</title>
+<title>TipRanks Signal Monitor — local data</title>
+<meta name="robots" content="noindex, nofollow">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 <style>
@@ -350,6 +351,207 @@ tbody tr{cursor:pointer}
     <div class="cap" style="margin-top:8px">Total-return series (dividends reinvested) — the latest point equals the actual price; earlier history is adjusted. Dotted lines are analyst targets (best-analyst green, consensus grey; a single "best ≈ cons" line means the two sit within 1% of price of each other): implied, not validated. 50d / 200d are session moving averages.</div>
   </div>
 </div>
+
+<!-- monitor_shell.html — local-data loader for the GitHub Pages build of the monitor.
+
+     Injected into docs/monitor/index.html by scripts/pipeline.py; never present
+     in template.html itself, so `npx serve .` and the single-file static export
+     behave exactly as before.
+
+     The IP firewall is why this exists. The monitor's values are licensed
+     per-name TipRanks / Norgate data under personal-use licences and can never
+     be hosted. Publishing the CODE is fine, so the code goes to Pages and the
+     operator supplies the values from their own machine: the weekly export is
+     read with the FileReader API, held in this browser (IndexedDB) so it
+     survives a reload, and never sent anywhere. The page is static — there is
+     no backend to send it to. -->
+<style>
+#shellOvl{position:fixed;inset:0;background:rgba(250,250,248,0.97);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto}
+#shellOvl.gone{display:none}
+.sh-card{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);max-width:620px;width:100%;padding:30px 32px}
+.sh-card h2{font-family:var(--serif);font-size:27px;font-weight:400;letter-spacing:-0.4px;line-height:1.1}
+.sh-card h2 em{font-style:italic;color:var(--t3)}
+.sh-sub{font-size:13px;color:var(--t2);margin-top:8px}
+.sh-drop{margin-top:20px;border:1.5px dashed var(--bd2);border-radius:var(--radius);background:var(--bg3);padding:26px 20px;text-align:center;cursor:pointer;transition:border-color .12s,background .12s}
+.sh-drop:hover,.sh-drop.over{border-color:var(--b2);background:var(--b-bg)}
+.sh-drop b{font-size:14px;display:block;margin-bottom:5px}
+.sh-drop span{font-size:12px;color:var(--t3);font-family:var(--mono)}
+.sh-note{margin-top:16px;background:var(--b-bg);border:1px solid var(--b-bg2);border-radius:var(--radius);padding:10px 13px;font-size:12px;color:var(--t2);line-height:1.55}
+.sh-note b{color:var(--b)}
+.sh-path{margin-top:14px;font-size:12px;color:var(--t3);line-height:1.6}
+.sh-path code{font-family:var(--mono);font-size:11px;background:var(--bg4);padding:1.5px 5px;border-radius:4px;color:var(--t2)}
+.sh-status{margin-top:14px;font-size:12.5px;font-family:var(--mono);min-height:18px}
+.sh-status.err{color:var(--r)} .sh-status.ok{color:var(--g)}
+.sh-row{margin-top:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sh-btn{font-family:var(--sans);font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:var(--radius);border:1px solid var(--bd2);background:var(--bg2);color:var(--t1);cursor:pointer;min-height:38px}
+.sh-btn:hover{background:var(--bg-hover)}
+.sh-btn.pri{background:#1a1a18;color:#f5f5f0;border-color:#1a1a18}
+.sh-btn:disabled{opacity:.45;cursor:not-allowed}
+#shellReopen{position:fixed;right:18px;bottom:18px;z-index:900;font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 14px;border-radius:999px;border:1px solid var(--bd2);background:var(--bg2);color:var(--t2);box-shadow:var(--shadow-md);cursor:pointer;display:none;min-height:38px}
+#shellReopen:hover{color:var(--t1);background:var(--bg-hover)}
+@media(max-width:640px){.sh-card{padding:24px 20px}.sh-card h2{font-size:23px}}
+</style>
+
+<div id="shellOvl">
+  <div class="sh-card">
+    <h2>TipRanks Signal <em>Monitor</em></h2>
+    <div class="sh-sub">Hosted code, local data. This page carries no vendor values — load this week's export from your own machine to populate it.</div>
+
+    <div class="sh-drop" id="shDrop">
+      <b>Drop the weekly export here</b>
+      <span>tipranks_monitor_YYYY-MM-DD.html</span>
+    </div>
+    <input type="file" id="shFile" accept=".html,.htm,.json" style="display:none">
+
+    <div class="sh-status" id="shStatus"></div>
+
+    <div class="sh-row">
+      <button class="sh-btn pri" id="shPick">Choose file…</button>
+      <button class="sh-btn" id="shClear" disabled>Clear stored data</button>
+    </div>
+
+    <div class="sh-note"><b>Nothing is uploaded.</b> The file is read in this browser and cached here (IndexedDB) so a reload does not need it again. This is a static page with no backend; the per-name data cannot leave this device through it.</div>
+
+    <div class="sh-path">Produce the export with <code>python scripts/capture.py --latest --asof YYYY-MM-DD</code>, or <code>python scripts/export_html.py</code> alone. It lands in <code>data/exports/</code> and is copied to <code>OneDrive\Main\tipranks-signal\</code>, so any device signed in to OneDrive can load it. <code>dashboard_data.json</code> also works, without the price charts.</div>
+  </div>
+</div>
+<button id="shellReopen" title="Load a different week">Load data</button>
+
+<script>
+window.__HOSTED_SHELL__ = true;   // suppress template.html's automatic boot
+
+(function(){
+  const DB = 'tipranks-monitor', STORE = 'bundle', KEY = 'current';
+  const $s = s => document.querySelector(s);
+  let booted = false;
+
+  function idb(){
+    return new Promise((res, rej) => {
+      const q = indexedDB.open(DB, 1);
+      q.onupgradeneeded = () => q.result.createObjectStore(STORE);
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => rej(q.error);
+    });
+  }
+  async function idbGet(){
+    try{
+      const db = await idb();
+      return await new Promise((res, rej) => {
+        const r = db.transaction(STORE, 'readonly').objectStore(STORE).get(KEY);
+        r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error);
+      });
+    }catch(e){ return null; }
+  }
+  async function idbPut(v){
+    try{
+      const db = await idb();
+      await new Promise((res, rej) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(v, KEY);
+        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+      });
+      return true;
+    }catch(e){ return false; }
+  }
+  async function idbDel(){
+    try{
+      const db = await idb();
+      await new Promise(res => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).delete(KEY); tx.oncomplete = res; tx.onerror = res;
+      });
+    }catch(e){}
+  }
+
+  const status = (msg, cls) => { const el = $s('#shStatus'); el.textContent = msg; el.className = 'sh-status' + (cls ? ' ' + cls : ''); };
+
+  // Pull the two globals out of a single-file export written by export_html.py.
+  // That script emits exactly:  window.__EXPORT_DATA__=<json>;window.__EXPORT_PRICES__=<json>;
+  // inside one <script>, with "</" escaped as "<\/". Slice on those fixed
+  // markers rather than parsing HTML — the shape is generated, not authored.
+  function fromExportHtml(text){
+    const A = 'window.__EXPORT_DATA__=', B = ';window.__EXPORT_PRICES__=', C = ';<\/script>';
+    const a = text.indexOf(A); if(a < 0) return null;
+    const b = text.indexOf(B, a); if(b < 0) return null;
+    const c = text.indexOf(C, b); if(c < 0) return null;
+    const unesc = s => s.split('<\\/').join('</');
+    return {
+      data:   JSON.parse(unesc(text.slice(a + A.length, b))),
+      prices: JSON.parse(unesc(text.slice(b + B.length, c)))
+    };
+  }
+
+  function parseFile(name, text){
+    if(/\.html?$/i.test(name)){
+      const p = fromExportHtml(text);
+      if(!p) throw new Error('not a monitor export — no inlined data found');
+      return p;
+    }
+    const j = JSON.parse(text);
+    if(j.data && typeof j.data === 'object') return { data: j.data, prices: j.prices || {} };  // bundle shape
+    if(!j.as_of || !j.table) throw new Error('not a dashboard_data.json (missing as_of / table)');
+    return { data: j, prices: {} };
+  }
+
+  function start(bundle, label){
+    window.__EXPORT_DATA__   = bundle.data;
+    window.__EXPORT_PRICES__ = bundle.prices || {};
+    $s('#shellOvl').classList.add('gone');
+    $s('#shellReopen').style.display = 'block';
+    if(booted){ location.reload(); return; }   // swapping weeks: cleanest full re-render
+    booted = true;
+    window.__bootMonitor();
+    if(label) console.info('[monitor] loaded ' + label);
+  }
+
+  async function accept(file){
+    status('Reading ' + file.name + ' (' + (file.size/1e6).toFixed(1) + ' MB)…');
+    let bundle;
+    try{
+      bundle = parseFile(file.name, await file.text());
+    }catch(e){
+      status('Could not read that file: ' + e.message, 'err');
+      return;
+    }
+    const asof = bundle.data.as_of || '?';
+    const stored = await idbPut({ as_of: asof, name: file.name, data: bundle.data, prices: bundle.prices });
+    status('Loaded ' + asof + (stored ? ' — cached in this browser' : ' — could not cache (loaded for this visit only)'), 'ok');
+    $s('#shClear').disabled = false;
+    start(bundle, file.name + ' @ ' + asof);
+  }
+
+  // --- wiring -------------------------------------------------------------
+  const drop = $s('#shDrop'), input = $s('#shFile');
+  $s('#shPick').addEventListener('click', () => input.click());
+  drop.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { if(input.files[0]) accept(input.files[0]); input.value = ''; });
+  ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if(f) accept(f); });
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => e.preventDefault());
+
+  $s('#shClear').addEventListener('click', async () => {
+    await idbDel();
+    status('Stored data cleared from this browser.', 'ok');
+    $s('#shClear').disabled = true;
+    if(booted) location.reload();
+  });
+  $s('#shellReopen').addEventListener('click', () => $s('#shellOvl').classList.remove('gone'));
+
+  // Restore a previously loaded week, if this browser has one.
+  window.addEventListener('DOMContentLoaded', async () => {
+    const cached = await idbGet();
+    if(cached && cached.data){
+      $s('#shClear').disabled = false;
+      status('Restored ' + (cached.as_of || '?') + ' from this browser.', 'ok');
+      start({ data: cached.data, prices: cached.prices }, 'cache @ ' + cached.as_of);
+    }else{
+      status('No data loaded yet.');
+    }
+  });
+})();
+</script>
 
 <script>
 const $ = s => document.querySelector(s);
