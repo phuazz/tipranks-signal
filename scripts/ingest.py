@@ -196,7 +196,7 @@ def expand_exports(paths) -> list[Path]:
     return out
 
 
-def ingest(exports, asof: dt.date) -> Path:
+def ingest(exports, asof: dt.date, out_dir: Path | None = None) -> Path:
     files = expand_exports(exports)
     frames, shas = [], {}
     for f in files:
@@ -221,8 +221,11 @@ def ingest(exports, asof: dt.date) -> Path:
         "duplicate_tickers_dropped": dups,
         "records": records,
     }
-    SNAP_DIR.mkdir(parents=True, exist_ok=True)
-    out = SNAP_DIR / f"snapshot_{asof.isoformat()}.json"
+    # out_dir lets the daily event log write to its own stream (data/daily/)
+    # without touching the frozen weekly panel in data/snapshots/.
+    dest = out_dir or SNAP_DIR
+    dest.mkdir(parents=True, exist_ok=True)
+    out = dest / f"snapshot_{asof.isoformat()}.json"
     out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
     src = f"{len(files)} page-files" if len(files) > 1 else files[0].name
     print(f"[ingest] {len(records)} names from {src} -> {out.relative_to(ROOT)}  ({weekday})")

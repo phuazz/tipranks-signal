@@ -28,6 +28,16 @@ There is **no API** on either licence (TipRanks Ultimate, Norgate Platinum — b
 
 `capture.py` is the guard layer. It validates the export *before* anything is filed or ingested — column contract (imported from `ingest.py`, never copied), row count and ticker overlap against the prior capture, a content hash against the previous export to catch a stale re-submit, and date sanity — aborts on any failure, then files the raw CSV to OneDrive and runs ingest → feed gate → merge → dashboard → HTML export (+ OneDrive copy) → public page. Flags: `--file <path>` instead of `--latest`, `--validate-only` to run the guards alone, `--force` to overwrite a captured date, `--push` to commit and push the public aggregates. `python scripts/status.py` reports accrual.
 
+### Daily event log (optional, additive)
+
+```
+python scripts/capture.py --latest --asof YYYY-MM-DD --daily
+```
+
+Same guards, ~15 seconds, then it stops: the entry lands in `data/daily/` (raw CSV in `OneDrive\Main\tipranks-signal\daily\`) and **the frozen weekly panel is untouched**. Its purpose is event-time precision, not statistical power — the verdict clock stays calendar-bound at the weekly cadence. The export stamps `Last Rating Date`, so S1a rating events are already dated to the day, but **target revisions carry no date** and are smeared across the capture window; daily entries narrow that smear and expose intra-week reversals the weekly panel nets out. Nothing in the log is graded, and it cannot feed a graded scheme without a dated register amendment with clock-start.
+
+**Missing days is fine by design.** A gap costs only event-dating precision inside that gap. Each run prints a coverage report — US sessions covered versus expected (XNYS calendar), and which sessions are uncovered — so coverage is stated honestly rather than assumed.
+
 **Capture dates are the Singapore download day.** The merge anchors every name on the last US session *on or before* that date (stored per record as `anchor_date`), so a Thursday-SGT capture anchors on the Wednesday US close — the signal is observed after that close, so there is no look-ahead by construction.
 `python scripts/pipeline.py` rebuilds both Pages surfaces — the public aggregate page (`docs/index.html`) and the data-less monitor shell (`docs/monitor/index.html`); commit and push `docs/` to publish. `capture.py` runs it as its last step, so a normal weekly capture already refreshes both.
 

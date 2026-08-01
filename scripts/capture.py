@@ -16,6 +16,7 @@ Usage:
     python scripts/capture.py --latest --asof 2026-07-30      # newest CSV in Downloads
     python scripts/capture.py --file ... --validate-only      # guards only, touch nothing
     python scripts/capture.py --latest --push                 # also commit + push the public page
+    python scripts/capture.py --latest --daily                # daily event log entry (~15s, panel untouched)
 
 The column contract is IMPORTED from ingest.py, never copied, so the guard
 cannot drift from the real mapping. Dates go through datetime only (Python
@@ -40,6 +41,16 @@ ONEDRIVE = Path.home() / "OneDrive" / "Main" / "tipranks-signal"
 DOWNLOADS = Path.home() / "Downloads"
 SNAP_DIR = ROOT / "data" / "snapshots"
 EXPORT_DIR = ROOT / "data" / "exports"
+# --- daily event log ------------------------------------------------------
+# A SEPARATE stream from the frozen weekly panel. Its purpose is event-time
+# precision: the export stamps Last Rating Date, so S1a rating events are
+# already dated to the day, but TARGET revisions carry no date and are smeared
+# across the capture window. Daily captures narrow that smear and expose
+# intra-week reversals the weekly panel nets out. Nothing here is graded, and
+# a missed day costs only precision on events inside the gap -- which is
+# exactly why this lives outside data/snapshots/ and cannot contaminate it.
+DAILY_SNAP_DIR = ROOT / "data" / "daily"
+DAILY_ONEDRIVE = ONEDRIVE / "daily"
 
 ROW_TOLERANCE = 0.05     # +/- 5% vs the prior capture; observed week-on-week drift is < 1%
 MIN_OVERLAP = 0.90       # ticker overlap floor vs the prior capture
@@ -59,25 +70,29 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _prior_snapshot(asof: dt.date):
+def _prior_snapshot(asof: dt.date, snap_dir: Path = SNAP_DIR, fallback_dir: Path | None = None):
     """Newest snapshot strictly BEFORE asof, so re-running a date compares
-    against the right baseline rather than against itself."""
-    best = None
-    for p in sorted(SNAP_DIR.glob("snapshot_*.json")) if SNAP_DIR.exists() else []:
-        try:
-            d = dt.date.fromisoformat(p.stem.replace("snapshot_", ""))
-        except ValueError:
-            continue
-        if d < asof and (best is None or d > best[0]):
-            best = (d, p)
-    if best is None:
-        return None
-    snap = json.loads(best[1].read_text(encoding="utf-8"))
-    snap["_date"] = best[0]
-    return snap
+    against the right baseline rather than against itself. Daily mode searches
+    the daily log first and falls back to the weekly panel until the log has
+    its own history."""
+    for d_dir in [snap_dir] + ([fallback_dir] if fallback_dir else []):
+        best = None
+        for p in sorted(d_dir.glob("snapshot_*.json")) if d_dir.exists() else []:
+            try:
+                d = dt.date.fromisoformat(p.stem.replace("snapshot_", ""))
+            except ValueError:
+                continue
+            if d < asof and (best is None or d > best[0]):
+                best = (d, p)
+        if best is not None:
+            snap = json.loads(best[1].read_text(encoding="utf-8"))
+            snap["_date"] = best[0]
+            return snap
+    return None
 
 
-def validate(csv_path: Path, asof: dt.date, force: bool):
+def validate(csv_path: Path, asof: dt.date, force: bool,
+             snap_dir: Path = SNAP_DIR, fallback_dir: Path | None = None):
     """Return (checks, fatal_count). Each check is (ok, label, detail)."""
     checks = []
     today = dt.date.today()
@@ -96,7 +111,7 @@ def validate(csv_path: Path, asof: dt.date, force: bool):
                    "all core fields mapped" if not missing_core
                    else f"MISSING: {missing_core}"))
 
-    prior = _prior_snapshot(asof)
+    prior = _prior_snapshot(asof, snap_dir, fallback_dir)
     if prior is not None:
         prior_recs = prior["records"]
         prior_fields = set(prior_recs[0].keys()) - {"as_of"}
@@ -128,7 +143,8 @@ def validate(csv_path: Path, asof: dt.date, force: bool):
         # --- stale re-submit --------------------------------------------------
         # Identical bytes to the previous export means the screener served a
         # cached file, or the same download was submitted twice.
-        same = _sha256(csv_path) in set(prior.get("source_sha256") or [])
+        # source_sha256 is {filename: sha} -- compare against the VALUES.
+        same = _sha256(csv_path) in set((prior.get("source_sha256") or {}).values())
         checks.append((not same, "export is fresh",
                        "content differs from the prior export" if not same
                        else "IDENTICAL to the previous export -- re-export before filing"))
@@ -141,13 +157,50 @@ def validate(csv_path: Path, asof: dt.date, force: bool):
     if prior is not None:
         checks.append((asof > prior["_date"], "as-of after the prior capture",
                        f"{asof.isoformat()} > {prior['_date'].isoformat()}"))
-    existing = SNAP_DIR / f"snapshot_{asof.isoformat()}.json"
+    existing = snap_dir / f"snapshot_{asof.isoformat()}.json"
     checks.append((force or not existing.exists(), "no snapshot for this date",
                    "date is new" if not existing.exists()
                    else ("overwriting (--force)" if force else "ALREADY CAPTURED -- pass --force to overwrite")))
 
     fatal = sum(1 for ok, _, _ in checks if not ok)
     return checks, fatal
+
+
+def _anchor_session(d: dt.date, sessions: list[dt.date]):
+    """The US session a Singapore-day capture reflects: the last XNYS session on
+    or before the previous calendar day, because a US close lands at about
+    04:00 SGT the following morning. Calendar library only -- never hand-rolled."""
+    cutoff = d - dt.timedelta(days=1)
+    prior = [s for s in sessions if s <= cutoff]
+    return prior[-1] if prior else None
+
+
+def daily_coverage() -> None:
+    """Report which US sessions the daily log covers and where the gaps are.
+    Gaps are expected: they cost event-dating precision inside the gap and
+    nothing else, so this reports honestly rather than failing."""
+    if not DAILY_SNAP_DIR.exists():
+        return
+    dates = sorted(dt.date.fromisoformat(p.stem.replace("snapshot_", ""))
+                   for p in DAILY_SNAP_DIR.glob("snapshot_*.json"))
+    if not dates:
+        return
+    import exchange_calendars as xcals
+    cal = xcals.get_calendar("XNYS")
+    lo = (dates[0] - dt.timedelta(days=10)).isoformat()
+    hi = dates[-1].isoformat()
+    sessions = [s.date() for s in cal.sessions_in_range(lo, hi)]
+    covered = sorted({a for a in (_anchor_session(d, sessions) for d in dates) if a})
+    if not covered:
+        return
+    in_range = [s for s in sessions if covered[0] <= s <= covered[-1]]
+    missed = [s for s in in_range if s not in set(covered)]
+    print(f"\n[daily] event log: {len(dates)} capture(s), "
+          f"{dates[0].isoformat()} -> {dates[-1].isoformat()} (Singapore capture dates)")
+    print(f"[daily] US sessions covered: {len(covered)} of {len(in_range)} in range "
+          f"({len(covered) / len(in_range):.0%}); latest anchor {covered[-1].isoformat()}")
+    print("[daily] uncovered sessions: "
+          + (", ".join(s.isoformat() for s in missed) if missed else "none"))
 
 
 def run(cmd: list[str], label: str) -> None:
@@ -167,6 +220,9 @@ def main() -> int:
     ap.add_argument("--validate-only", action="store_true", help="run the guards and stop")
     ap.add_argument("--force", action="store_true", help="allow overwriting an existing capture date")
     ap.add_argument("--push", action="store_true", help="commit and push the public page afterwards")
+    ap.add_argument("--daily", action="store_true",
+                    help="file into the daily event log (data/daily/): validate and ingest only, "
+                         "no merge / dashboard / publish. The frozen weekly panel is untouched.")
     a = ap.parse_args()
 
     if a.latest:
@@ -183,9 +239,11 @@ def main() -> int:
 
     asof = dt.date.fromisoformat(a.asof) if a.asof else dt.date.today()
 
-    print(f"\n[capture] integrity report -- {csv_path.name} as of {asof.isoformat()} "
-          f"({asof.strftime('%A')})")
-    checks, fatal = validate(csv_path, asof, a.force)
+    snap_dir = DAILY_SNAP_DIR if a.daily else SNAP_DIR
+    fallback = SNAP_DIR if a.daily else None
+    print(f"\n[capture] integrity report ({'daily event log' if a.daily else 'weekly panel'}) "
+          f"-- {csv_path.name} as of {asof.isoformat()} ({asof.strftime('%A')})")
+    checks, fatal = validate(csv_path, asof, a.force, snap_dir, fallback)
     width = max(len(lbl) for _, lbl, _ in checks)
     for ok, lbl, detail in checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {lbl.ljust(width)}  {detail}")
@@ -194,6 +252,19 @@ def main() -> int:
     print(f"\n[capture] all {len(checks)} checks passed.")
     if a.validate_only:
         print("[capture] --validate-only: stopping before filing.")
+        return 0
+
+    # --- daily event log: validate + ingest only, then stop ----------------
+    if a.daily:
+        DAILY_ONEDRIVE.mkdir(parents=True, exist_ok=True)
+        filed = DAILY_ONEDRIVE / f"tipranks_{asof.isoformat()}.csv"
+        if csv_path.resolve() != filed.resolve():
+            shutil.copy2(csv_path, filed)
+        print(f"[capture] filed -> {filed}")
+        ingest.ingest([filed], asof, out_dir=DAILY_SNAP_DIR)
+        daily_coverage()
+        print(f"\n[capture] DONE -- daily log entry {asof.isoformat()} recorded. "
+              f"The frozen weekly panel is untouched.")
         return 0
 
     # --- file the raw export (archive of record) ---------------------------
