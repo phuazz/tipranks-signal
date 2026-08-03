@@ -70,29 +70,41 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _prior_snapshot(asof: dt.date, snap_dir: Path = SNAP_DIR, fallback_dir: Path | None = None):
-    """Newest snapshot strictly BEFORE asof, so re-running a date compares
-    against the right baseline rather than against itself. Daily mode searches
-    the daily log first and falls back to the weekly panel until the log has
-    its own history."""
+def _snap_key(p: Path):
+    """(date, time) sort key from snapshot_<date>[_<HHMM>].json. Daily-log
+    entries carry the capture time so several a day can coexist and order
+    correctly; weekly panel files have an empty time component."""
+    s = p.stem.replace("snapshot_", "")
+    try:
+        return (dt.date.fromisoformat(s[:10]), s[11:] if len(s) > 10 else "")
+    except ValueError:
+        return None
+
+
+def _prior_snapshot(asof_key, snap_dir: Path = SNAP_DIR, fallback_dir: Path | None = None):
+    """Newest snapshot strictly BEFORE asof_key (a (date, time) tuple), so a
+    re-run compares against the right baseline rather than against itself.
+    Daily mode searches the daily log first and falls back to the weekly panel
+    until the log has its own history."""
     for d_dir in [snap_dir] + ([fallback_dir] if fallback_dir else []):
         best = None
-        for p in sorted(d_dir.glob("snapshot_*.json")) if d_dir.exists() else []:
-            try:
-                d = dt.date.fromisoformat(p.stem.replace("snapshot_", ""))
-            except ValueError:
+        for p in d_dir.glob("snapshot_*.json") if d_dir.exists() else []:
+            k = _snap_key(p)
+            if k is None or k >= asof_key:
                 continue
-            if d < asof and (best is None or d > best[0]):
-                best = (d, p)
+            if best is None or k > best[0]:
+                best = (k, p)
         if best is not None:
             snap = json.loads(best[1].read_text(encoding="utf-8"))
-            snap["_date"] = best[0]
+            snap["_date"] = best[0][0]
+            snap["_key"] = best[0]
             return snap
     return None
 
 
 def validate(csv_path: Path, asof: dt.date, force: bool,
-             snap_dir: Path = SNAP_DIR, fallback_dir: Path | None = None):
+             snap_dir: Path = SNAP_DIR, fallback_dir: Path | None = None,
+             snap_name: str | None = None, asof_time: str = ""):
     """Return (checks, fatal_count). Each check is (ok, label, detail)."""
     checks = []
     today = dt.date.today()
@@ -111,7 +123,7 @@ def validate(csv_path: Path, asof: dt.date, force: bool,
                    "all core fields mapped" if not missing_core
                    else f"MISSING: {missing_core}"))
 
-    prior = _prior_snapshot(asof, snap_dir, fallback_dir)
+    prior = _prior_snapshot((asof, asof_time), snap_dir, fallback_dir)
     if prior is not None:
         prior_recs = prior["records"]
         prior_fields = set(prior_recs[0].keys()) - {"as_of"}
@@ -155,11 +167,16 @@ def validate(csv_path: Path, asof: dt.date, force: bool,
     checks.append((asof <= today, "as-of not in the future",
                    f"{asof.isoformat()} ({asof.strftime('%A')}); today is {today.isoformat()}"))
     if prior is not None:
-        checks.append((asof > prior["_date"], "as-of after the prior capture",
-                       f"{asof.isoformat()} > {prior['_date'].isoformat()}"))
-    existing = snap_dir / f"snapshot_{asof.isoformat()}.json"
-    checks.append((force or not existing.exists(), "no snapshot for this date",
-                   "date is new" if not existing.exists()
+        # Daily entries compare on (date, time), so a same-day later capture is
+        # correctly "after" the earlier one rather than a duplicate.
+        newer = (asof, asof_time) > prior["_key"]
+        checks.append((newer, "capture is after the prior one",
+                       f"{asof.isoformat()}{' ' + asof_time if asof_time else ''} > "
+                       f"{prior['_date'].isoformat()}"
+                       f"{' ' + prior['_key'][1] if prior['_key'][1] else ''}"))
+    existing = snap_dir / (snap_name or f"snapshot_{asof.isoformat()}.json")
+    checks.append((force or not existing.exists(), "not already captured",
+                   "new entry" if not existing.exists()
                    else ("overwriting (--force)" if force else "ALREADY CAPTURED -- pass --force to overwrite")))
 
     fatal = sum(1 for ok, _, _ in checks if not ok)
@@ -181,10 +198,11 @@ def daily_coverage() -> None:
     nothing else, so this reports honestly rather than failing."""
     if not DAILY_SNAP_DIR.exists():
         return
-    dates = sorted(dt.date.fromisoformat(p.stem.replace("snapshot_", ""))
-                   for p in DAILY_SNAP_DIR.glob("snapshot_*.json"))
-    if not dates:
+    keys = sorted(k for k in (_snap_key(p) for p in DAILY_SNAP_DIR.glob("snapshot_*.json"))
+                  if k is not None)
+    if not keys:
         return
+    dates = [k[0] for k in keys]
     import exchange_calendars as xcals
     cal = xcals.get_calendar("XNYS")
     lo = (dates[0] - dt.timedelta(days=10)).isoformat()
@@ -195,8 +213,16 @@ def daily_coverage() -> None:
         return
     in_range = [s for s in sessions if covered[0] <= s <= covered[-1]]
     missed = [s for s in in_range if s not in set(covered)]
-    print(f"\n[daily] event log: {len(dates)} capture(s), "
+    # Slot split: a capture taken before the US open (about 21:30 SGT) sees a
+    # completed session; a later one straddles the live US session and catches
+    # intraday flow early. Both are being trialled -- report the mix.
+    timed = [k for k in keys if k[1]]
+    pre = sum(1 for k in timed if k[1] < "2130")
+    print(f"\n[daily] event log: {len(keys)} capture(s), "
           f"{dates[0].isoformat()} -> {dates[-1].isoformat()} (Singapore capture dates)")
+    if timed:
+        print(f"[daily] slots: {pre} post-close (before 21:30 SGT) / "
+              f"{len(timed) - pre} intraday (after the US open); {len(keys) - len(timed)} untimed")
     print(f"[daily] US sessions covered: {len(covered)} of {len(in_range)} in range "
           f"({len(covered) / len(in_range):.0%}); latest anchor {covered[-1].isoformat()}")
     print("[daily] uncovered sessions: "
@@ -241,9 +267,15 @@ def main() -> int:
 
     snap_dir = DAILY_SNAP_DIR if a.daily else SNAP_DIR
     fallback = SNAP_DIR if a.daily else None
+    # The export's own mtime is the true capture moment; it keys daily entries
+    # so several captures a day coexist and order correctly.
+    stamp = dt.datetime.fromtimestamp(csv_path.stat().st_mtime)
+    asof_time = f"{stamp:%H%M}" if a.daily else ""
+    snap_name = f"snapshot_{asof.isoformat()}_{asof_time}.json" if a.daily else None
     print(f"\n[capture] integrity report ({'daily event log' if a.daily else 'weekly panel'}) "
-          f"-- {csv_path.name} as of {asof.isoformat()} ({asof.strftime('%A')})")
-    checks, fatal = validate(csv_path, asof, a.force, snap_dir, fallback)
+          f"-- {csv_path.name} as of {asof.isoformat()} ({asof.strftime('%A')})"
+          + (f" captured {stamp:%H:%M} SGT" if a.daily else ""))
+    checks, fatal = validate(csv_path, asof, a.force, snap_dir, fallback, snap_name, asof_time)
     width = max(len(lbl) for _, lbl, _ in checks)
     for ok, lbl, detail in checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {lbl.ljust(width)}  {detail}")
@@ -257,11 +289,12 @@ def main() -> int:
     # --- daily event log: validate + ingest only, then stop ----------------
     if a.daily:
         DAILY_ONEDRIVE.mkdir(parents=True, exist_ok=True)
-        filed = DAILY_ONEDRIVE / f"tipranks_{asof.isoformat()}.csv"
+        filed = DAILY_ONEDRIVE / f"tipranks_{asof.isoformat()}_{asof_time}.csv"
         if csv_path.resolve() != filed.resolve():
             shutil.copy2(csv_path, filed)
         print(f"[capture] filed -> {filed}")
-        ingest.ingest([filed], asof, out_dir=DAILY_SNAP_DIR)
+        ingest.ingest([filed], asof, out_dir=DAILY_SNAP_DIR, out_name=snap_name,
+                      captured_at=stamp.isoformat(timespec="minutes"))
         daily_coverage()
         print(f"\n[capture] DONE -- daily log entry {asof.isoformat()} recorded. "
               f"The frozen weekly panel is untouched.")

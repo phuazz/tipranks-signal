@@ -196,7 +196,8 @@ def expand_exports(paths) -> list[Path]:
     return out
 
 
-def ingest(exports, asof: dt.date, out_dir: Path | None = None) -> Path:
+def ingest(exports, asof: dt.date, out_dir: Path | None = None,
+           out_name: str | None = None, captured_at: str | None = None) -> Path:
     files = expand_exports(exports)
     frames, shas = [], {}
     for f in files:
@@ -211,6 +212,9 @@ def ingest(exports, asof: dt.date, out_dir: Path | None = None) -> Path:
     payload = {
         "schema_version": SCHEMA_VERSION,
         "as_of": asof.isoformat(),
+        # captured_at is the export's own timestamp -- set for daily-log entries,
+        # where several captures a day are expected and their ORDER matters.
+        "captured_at": captured_at,
         "as_of_weekday": weekday,
         "as_of_is_weekend": asof.weekday() >= 5,   # Mon=0 .. Sun=6
         "source_files": [f.name for f in files],
@@ -225,7 +229,7 @@ def ingest(exports, asof: dt.date, out_dir: Path | None = None) -> Path:
     # without touching the frozen weekly panel in data/snapshots/.
     dest = out_dir or SNAP_DIR
     dest.mkdir(parents=True, exist_ok=True)
-    out = dest / f"snapshot_{asof.isoformat()}.json"
+    out = dest / (out_name or f"snapshot_{asof.isoformat()}.json")
     out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
     src = f"{len(files)} page-files" if len(files) > 1 else files[0].name
     print(f"[ingest] {len(records)} names from {src} -> {out.relative_to(ROOT)}  ({weekday})")

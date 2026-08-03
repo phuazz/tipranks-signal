@@ -34,7 +34,16 @@ There is **no API** on either licence (TipRanks Ultimate, Norgate Platinum — b
 python scripts/capture.py --latest --asof YYYY-MM-DD --daily
 ```
 
-Same guards, ~15 seconds, then it stops: the entry lands in `data/daily/` (raw CSV in `OneDrive\Main\tipranks-signal\daily\`) and **the frozen weekly panel is untouched**. Its purpose is event-time precision, not statistical power — the verdict clock stays calendar-bound at the weekly cadence. The export stamps `Last Rating Date`, so S1a rating events are already dated to the day, but **target revisions carry no date** and are smeared across the capture window; daily entries narrow that smear and expose intra-week reversals the weekly panel nets out. Nothing in the log is graded, and it cannot feed a graded scheme without a dated register amendment with clock-start.
+Same guards, ~15 seconds, then it stops: the entry lands in `data/daily/` (raw CSV in `OneDrive\Main\tipranks-signal\daily\`) and **the frozen weekly panel is untouched**. Entries are keyed `snapshot_<date>_<HHMM>.json`, the HHMM taken from the export file's own modification time — the true capture moment — so **several captures a day coexist and order correctly**, and each snapshot records `captured_at`.
+
+**Two capture slots are being trialled** (from 2026-08-03) to establish which better dates target revisions:
+
+| Slot | When (SGT) | What it sees |
+|---|---|---|
+| Post-close | Tue–Sat, before ~21:30 | Exactly one completed US session per capture; clean anchor mapping |
+| Intraday | Mon–Fri, after ~21:30 | Straddles the live US session — catches the morning publishing burst early (the 2026-08-03 22:16 capture picked up 392 names re-rated that US morning) |
+
+Reminders for both slots are registered as scheduled tasks (`tipranks-capture-post-close`, `tipranks-capture-intraday`); each checks whether its slot is already filed before nudging, and reports running coverage. They fire only while the app is open — a due task runs on next launch. Its purpose is event-time precision, not statistical power — the verdict clock stays calendar-bound at the weekly cadence. The export stamps `Last Rating Date`, so S1a rating events are already dated to the day, but **target revisions carry no date** and are smeared across the capture window; daily entries narrow that smear and expose intra-week reversals the weekly panel nets out. Nothing in the log is graded, and it cannot feed a graded scheme without a dated register amendment with clock-start.
 
 **Missing days is fine by design.** A gap costs only event-dating precision inside that gap. Each run prints a coverage report — US sessions covered versus expected (XNYS calendar), and which sessions are uncovered — so coverage is stated honestly rather than assumed.
 
