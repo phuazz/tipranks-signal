@@ -5,6 +5,11 @@ data/
 *.xlsx
 *.xls
 
+# Filed study records and diagnostics stay local. These are working research
+# output, not publication: the repo publishes code, docs and the aggregate
+# Pages surfaces, and the studies ledger points at these files on disk.
+reviews/
+
 # Python
 __pycache__/
 *.pyc
