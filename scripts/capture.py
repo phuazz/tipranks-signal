@@ -310,7 +310,11 @@ def main() -> int:
         print(f"[capture] already filed at {filed}")
 
     py = sys.executable
-    run([py, "scripts/ingest.py", "--export", str(filed), "--asof", asof.isoformat()], "1/6 ingest")
+    # Register row 7 (2026-08-08): the weekly panel used to record only a DATE, so
+    # the confirmation window's boundary could not be tested against the capture
+    # instant. The daily log already carried it; the weekly stream now does too.
+    run([py, "scripts/ingest.py", "--export", str(filed), "--asof", asof.isoformat(),
+         "--captured-at", stamp.isoformat(timespec="minutes")], "1/6 ingest")
     run([py, "scripts/norgate.py", "--check"], "2/6 feed gate")
     run([py, "scripts/merge_norgate.py", "--asof", asof.isoformat()], "3/6 merge")
     run([py, "scripts/build_dashboard.py"], "4/6 dashboard")

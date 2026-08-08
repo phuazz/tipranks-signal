@@ -316,6 +316,10 @@ def main() -> int:
                     help="one or more .xlsx export pages, or a folder of page-files")
     ap.add_argument("--asof", help="capture date YYYY-MM-DD (default: today)")
     ap.add_argument("--selftest", action="store_true", help="run edge-case tests and exit")
+    ap.add_argument("--captured-at", metavar="ISO",
+                    help="capture instant, Singapore local ISO-8601. Register row 7: the "
+                         "weekly panel recorded only a DATE, so the confirmation window's "
+                         "boundary could not be tested against the capture instant")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -324,7 +328,7 @@ def main() -> int:
     if not args.export:
         ap.error("--export is required (or use --selftest)")
     asof = dt.date.fromisoformat(args.asof) if args.asof else dt.date.today()
-    ingest(args.export, asof)
+    ingest(args.export, asof, captured_at=args.captured_at)
     return 0
 
 

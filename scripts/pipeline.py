@@ -83,7 +83,12 @@ def _pair_counts(prev, curr):
         if p is None:
             continue
         rd = _parse_rating_date(r.get("last_rating_date"))
-        confirmed = rd is not None and p_asof < rd <= c_asof
+        # Register row 7 (2026-08-08): the lower bound is INCLUSIVE. A strict "<"
+        # discarded the whole boundary day, which is a full US publication session
+        # whenever the prior capture's as_of is a weekday. Valid because captures
+        # run before the ET open (< 21:30 SGT), so no rating dated on the boundary
+        # day can precede the prior capture -- see the row for the one exception.
+        confirmed = rd is not None and p_asof <= rd <= c_asof
         pc, nc = p.get("analyst_consensus"), r.get("analyst_consensus")
         d = breadth.setdefault(r.get("sector") or "—", {"up": 0, "down": 0, "raise": 0, "cut": 0})
         if pc in rank and nc in rank and pc != nc:

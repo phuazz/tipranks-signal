@@ -193,7 +193,10 @@ def main() -> int:
             if pc in rank and nc in rank and pc != nc:
                 label_dir = 1 if rank[nc] < rank[pc] else -1
             rd = _parse_rating_date(r.get("last_rating_date"))
-            confirmed = rd is not None and prev_asof < rd <= now_asof
+            # Register row 7 (2026-08-08): lower bound INCLUSIVE, matching
+            # pipeline.py -- a strict "<" discarded the whole boundary day, a full
+            # US publication session whenever the prior as_of is a weekday.
+            confirmed = rd is not None and prev_asof <= rd <= now_asof
             # de-minimis floor: a target move counts only at >= 0.25% of the prior
             # level -- deliberate analyst changes are >= ~1%; penny wiggles are noise
             bt_p, bt_n = p.get("best_analyst_price_target"), r.get("best_analyst_price_target")
