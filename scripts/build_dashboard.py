@@ -298,12 +298,18 @@ def main() -> int:
             "entered": entered, "left": left, "breadth": breadth,
         }
 
-    # --- per-name price history (lens-passed OR strongly-revised names) -------
+    # --- per-name price history (EVERY liquid name) ---------------------------
     # Display layer only: ~1y TOTALRETURN + 50/200-session averages, one small
-    # JSON each, fetched by the template on row click. |revision score| >= 8
-    # (label change and target move in agreement) earns a chart even off-lens --
-    # the revision leaders are exactly the names worth a look. Skipped
-    # gracefully when NDU is down; the weekly flow runs post-merge with NDU up.
+    # JSON each, fetched by the template on row click.
+    #
+    # This used to build charts only for lens-passed or strongly-revised names,
+    # which meant a click on anything else returned "no chart built". That put
+    # the view layer's screen in the way of looking at the data: the names the
+    # lens REJECTS -- the value traps, the ones failing the price gate -- are
+    # exactly the ones worth eyeballing on a chart to see what the screen is
+    # reacting to. A display filter should never decide what may be inspected.
+    # Every liquid name now gets a series. Skipped gracefully when NDU is down;
+    # the weekly flow runs post-merge with NDU up.
     price_dir = OUT_DIR / "prices"
     try:
         import norgate as ng
@@ -313,8 +319,6 @@ def main() -> int:
             old.unlink()
         asof_date = dt.date.fromisoformat(merge["as_of"])
         for row in table:
-            if not (row["lens_pass"] or abs(row.get("rev_rank", 0)) >= 8):
-                continue
             sym = sym_by_ticker.get(row["ticker"])
             if not sym:
                 continue
