@@ -223,7 +223,17 @@ def main() -> int:
                 score -= 5 if confirmed else 3
                 n_conf_dn += 1 if confirmed else 0
             if bt_pct is not None:
-                score += 4 if bt_pct > 0 else -4
+                # Graded by SIZE, not by sign alone. Scoring the sign gave a
+                # +/-0.55% nudge sitting just above the de-minimis floor the same
+                # weight as a -26% slashing, which made the score unreadable for
+                # magnitude exactly where magnitude is the whole point. Bands are
+                # taken from the observed distribution of the 577 moves past the
+                # floor in the 2026-08-07 window -- p25 = 0.86%, p75 = 4.09%, so
+                # 1% and 5% split it roughly 30 / 49 / 21. The maximum stays 4, so
+                # the documented +/-9-10 / 4-8 / 1-3 bands are unchanged. View
+                # layer and ungraded: the bands are a reading aid, never evidence.
+                mag = 2 if abs(bt_pct) < 1.0 else (3 if abs(bt_pct) < 5.0 else 4)
+                score += mag if bt_pct > 0 else -mag
             if ss_d is not None:
                 score += 1 if ss_d > 0 else -1
             row = row_by_ticker.get(t)
