@@ -95,9 +95,15 @@ REGISTER_CANDIDATES = """
       deciles keep cells populated at ~90 names on a ~900-name universe.
   (c) INSIDER AXIS MAPPING for S2 and S3: "Positive" -> +1, "Negative" -> -1,
       "Neutral" / missing -> 0. S3's "no net insider selling" is therefore
-      insider_signal != "Negative", which counts missing as non-selling -- the
-      conservative reading, since it does not let an absent field gate a name IN
-      on an assumption.
+      insider_signal != "Negative", so a MISSING field ADMITS a name rather than
+      excluding it. State the direction plainly: this is the LESS restrictive
+      reading and it admits on absence of evidence. It is chosen because the field
+      is missing on roughly 40% of the liquid universe (364 of 899 at 2026-08-07),
+      and excluding those would cut S3's universe by a arbitrary two-fifths on a
+      data-availability artefact rather than on the insider condition the memo
+      names. The gate still bites hard: 432 names carry "Negative" and are
+      excluded. "No net insider selling" is read as the field not indicating
+      selling, which a missing field does not.
   (d) S1a "improvement" = a strictly more bullish consensus label (a fall in the
       CONSENSUS_ORDER index), confirmed by Last Rating Date inside the window under
       the register-row-7 inclusive bound. Long-only, so downgrades select nothing.
