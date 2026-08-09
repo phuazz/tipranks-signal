@@ -145,10 +145,15 @@ def _zscore(x: pd.Series) -> pd.Series:
 
 def _design_matrix(df: pd.DataFrame) -> np.ndarray:
     """Intercept, log market cap, trailing yield, trailing beta, sector dummies."""
+    # Every column is coerced to float explicitly: the measurement frame is built
+    # by transposing a dict-of-dicts, which yields object dtype, and lstsq fails
+    # on object arrays rather than casting silently.
+    num = lambda s: pd.to_numeric(s, errors="coerce").astype(float)
     cols = [np.ones(len(df))]
-    cols.append(np.log(df["market_cap"].clip(lower=1.0)).to_numpy())
-    cols.append(df["dividend_yield"].fillna(0.0).to_numpy())
-    cols.append(df["beta"].fillna(df["beta"].mean()).to_numpy())
+    cols.append(np.log(num(df["market_cap"]).clip(lower=1.0)).to_numpy())
+    cols.append(num(df["dividend_yield"]).fillna(0.0).to_numpy())
+    b = num(df["beta"])
+    cols.append(b.fillna(b.mean() if b.notna().any() else 1.0).to_numpy())
     sectors = sorted(df["sector"].dropna().unique())
     for s in sectors[1:]:                      # drop first level; intercept carries it
         cols.append((df["sector"] == s).astype(float).to_numpy())
@@ -158,12 +163,13 @@ def _design_matrix(df: pd.DataFrame) -> np.ndarray:
 def residualise(df: pd.DataFrame, ycol: str) -> pd.Series:
     """Cross-sectional OLS residual. Mean is zero by construction, which is what
     makes the EW liquid universe the embedded benchmark (memo, Measurement)."""
-    ok = df[ycol].notna()
+    yv = pd.to_numeric(df[ycol], errors="coerce").astype(float)
+    ok = yv.notna()
     sub = df.loc[ok]
     if len(sub) < 20:
         return pd.Series(np.nan, index=df.index)
     X = _design_matrix(sub)
-    y = sub[ycol].to_numpy()
+    y = yv.loc[ok].to_numpy()
     coef, *_ = np.linalg.lstsq(X, y, rcond=None)
     resid = pd.Series(np.nan, index=df.index)
     resid.loc[ok] = y - X @ coef
@@ -367,6 +373,174 @@ def _norm_ppf(p: float) -> float:
 
 
 # --------------------------------------------------------------------------
+# panel measurement
+# --------------------------------------------------------------------------
+
+def measure_week(frame: pd.DataFrame, anchor: dt.date, horizon: str,
+                 get_series, market: pd.Series, sessions, data_asof: dt.date,
+                 delisted_known=None) -> pd.DataFrame:
+    """One formation week: raw -> drift-adjusted -> style-neutral, FULL universe.
+
+    The residual is fitted on every liquid name with a computable adjusted return,
+    never on the selected subset (register row 8(e)) -- that is what makes the
+    weekly residual mean zero and the EW universe the embedded benchmark. A scheme's
+    alpha is then simply the mean residual over its picks.
+    """
+    mkt = R._closes(market)
+    out = {}
+    for t, row in frame.iterrows():
+        s = get_series(row["symbol"])
+        if s is None or len(s) < R.MIN_TRAILING:
+            continue
+        fr = R.forward_return(s, anchor, horizon, data_asof,
+                              delisted_known=(delisted_known or {}).get(t))
+        if fr["ret_frac"] is None:
+            continue
+        risk = R.trailing_risk(s, mkt, anchor)
+        if risk["beta"] is None:
+            continue          # a short history is refused, never shrunk
+        mfr = R.forward_return(mkt, fr["entry_date"], horizon, data_asof)
+        if mfr["ret_frac"] is None:
+            continue
+        n_sess = R.sessions_between(fr["entry_date"], fr["exit_date"], sessions)
+        adj = R.drift_adjust(fr["ret_frac"], mfr["ret_frac"], risk["beta"],
+                             risk["drift_per_session"], n_sess)
+        out[t] = {"raw": fr["ret_frac"], "adj": adj, "beta": risk["beta"],
+                  "drift": risk["drift_per_session"], "delisted": fr["delisted"]}
+    if not out:
+        return pd.DataFrame()
+    res = pd.DataFrame(out).T
+    joined = frame.join(res, how="inner")
+    joined["neutral"] = residualise(joined, "adj")
+    return joined
+
+
+def cohort_cost(picks: set, frame: pd.DataFrame, prev_picks: set,
+                flat_bps: float | None = None) -> float:
+    """Mean round-trip cost across the cohort, in return fraction.
+
+    Charged on actual trades only (memo). A name also held in the immediately
+    preceding cohort of the same scheme was not sold and rebought, so it pays
+    nothing at the roll; everything else pays a full round trip. This is the
+    CONSERVATIVE reading of the book-level netting the memo describes -- it never
+    assumes a trade was avoided unless the prior cohort demonstrably held the name.
+    """
+    if not picks:
+        return 0.0
+    tot = 0.0
+    for t in picks:
+        if t in prev_picks:
+            continue
+        adv = float(frame.loc[t, "adv_usd"]) if t in frame.index else 0.0
+        tot += round_trip_cost_frac(adv, flat_bps)
+    return tot / len(picks)
+
+
+def run_panel(merges: list[dict], get_series, market: pd.Series, sessions,
+              data_asof: dt.date, horizons=None, flat_bps=None) -> dict:
+    """Assemble the weekly cohort-return series for every scheme and horizon."""
+    horizons = horizons or list(R.HORIZONS)
+    series = {s: {h: [] for h in horizons} for s in SCHEMES}
+    gross = {s: {h: [] for h in horizons} for s in SCHEMES}
+    weeks, universe_resid, picks_hist = [], [], {s: set() for s in SCHEMES}
+    turnover = {s: [] for s in SCHEMES}
+
+    for prev, curr in zip(merges, merges[1:]):
+        sel = select(prev, curr)
+        frame = sel["frame"]
+        if frame.empty:
+            continue
+        anchor = dt.date.fromisoformat(frame["anchor"].iloc[0]) if frame["anchor"].iloc[0] \
+            else dt.date.fromisoformat(curr["as_of"])
+        week_rows = {}
+        for h in horizons:
+            week_rows[h] = measure_week(frame, anchor, h, get_series, market,
+                                        sessions, data_asof)
+        base = week_rows[PRIMARY] if PRIMARY in week_rows else next(iter(week_rows.values()))
+        if base.empty:
+            continue
+        # S2 needs the realised betas from the measurement frame, so it is built here
+        picks = dict(sel["picks"])
+        picks["S2"] = build_s2(frame.loc[base.index.intersection(frame.index)],
+                               base["beta"])
+        weeks.append(curr["as_of"])
+        universe_resid.append(float(base["neutral"].mean()))
+
+        for s in SCHEMES:
+            p = picks[s] & set(base.index)
+            prev_p = picks_hist[s]
+            cost = cohort_cost(p, frame, prev_p, flat_bps)
+            new = len(p - prev_p)
+            turnover[s].append(new / len(p) if p else float("nan"))
+            for h in horizons:
+                wr = week_rows[h]
+                q = p & set(wr.index)
+                g = float(wr.loc[list(q), "neutral"].mean()) if q else float("nan")
+                gross[s][h].append(g)
+                series[s][h].append(g - cost if q else float("nan"))
+            picks_hist[s] = p
+
+    return {"weeks": weeks, "net": series, "gross": gross,
+            "turnover": turnover, "universe_resid": universe_resid}
+
+
+def null_pvalue(merges: list[dict], panel: dict, scheme: str, horizon: str,
+                get_series, market, sessions, data_asof, draws=NULL_DRAWS,
+                rng=None) -> float | None:
+    """Drift-matched random-entry null (register row 8(b)).
+
+    Each pick is replaced by a random liquid name from the SAME weekly decile of
+    trailing idiosyncratic drift, preserving cohort size and week. This is the leg
+    the BH-FDR applies to: it asks whether the scheme beats a portfolio that shares
+    its drift exposure but carries none of its information."""
+    obs = np.nanmean(panel["net"][scheme][horizon])
+    if math.isnan(obs):
+        return None
+    rng = rng or np.random.default_rng(20260811)
+    # Rebuild per-week residual/drift frames once, then resample cheaply.
+    cells = []
+    for prev, curr in zip(merges, merges[1:]):
+        sel = select(prev, curr)
+        frame = sel["frame"]
+        if frame.empty:
+            continue
+        anchor = dt.date.fromisoformat(frame["anchor"].iloc[0]) if frame["anchor"].iloc[0] \
+            else dt.date.fromisoformat(curr["as_of"])
+        wr = measure_week(frame, anchor, horizon, get_series, market, sessions, data_asof)
+        if wr.empty:
+            continue
+        picks = sel["picks"].get(scheme, set()) & set(wr.index)
+        if not picks:
+            continue
+        # Register row 8(b): match on the DECILE of trailing idiosyncratic drift,
+        # within the formation week. The replacement cohort must therefore have the
+        # same decile composition as the real one -- an unmatched draw would test
+        # against a portfolio with the universe's average drift, which is a weaker
+        # null and would flatter any scheme that happens to select high-drift names.
+        dec = pd.qcut(wr["drift"].rank(method="first"), 10, labels=False)
+        vals = wr["neutral"].to_numpy()
+        want = pd.Series(list(picks)).map(dec).value_counts().to_dict()
+        pools = {d: np.flatnonzero((dec == d).to_numpy()) for d in want}
+        cells.append((vals, pools, want))
+    if not cells:
+        return None
+    means = np.empty(draws)
+    for i in range(draws):
+        wk = []
+        for vals, pools, want in cells:
+            take = []
+            for d, k in want.items():
+                pool = pools[d]
+                if len(pool) == 0:
+                    continue
+                take.append(rng.choice(pool, size=min(int(k), len(pool)), replace=False))
+            if take:
+                wk.append(np.nanmean(vals[np.concatenate(take)]))
+        means[i] = np.nanmean(wk) if wk else np.nan
+    return float((means >= obs).mean())
+
+
+# --------------------------------------------------------------------------
 # guards
 # --------------------------------------------------------------------------
 
@@ -512,6 +686,100 @@ def selftest() -> int:
     check("a downgrade never selects -- the menu is long-only", "DN" not in sel2["S1a"])
     check("an upgrade with a stale rating date is not confirmed", "OLD" not in sel2["S1a"])
 
+    print("\nEND-TO-END on synthetic paths with a KNOWN answer")
+    # Build a market and 200 names with known betas and known idiosyncratic drift.
+    # Half the names are given a genuine one-month excess; the scheme picks exactly
+    # those. If the loop is correct it recovers the injected excess after stripping
+    # beta and drift -- and recovers ZERO for a scheme picking on a pure beta tilt.
+    idx = pd.bdate_range("2025-01-01", periods=420)
+    rng3 = np.random.default_rng(99)
+    # The market must carry real variance or beta is unidentifiable: cov/var on a
+    # constant-return market divides by a floating-point zero and returns noise.
+    mkt = pd.Series(100.0 * np.cumprod(1 + rng3.normal(0.0004, 0.008, len(idx))), index=idx)
+    names, series = [], {}
+    INJECT = 0.03                       # 3% one-month excess on the treated half
+    anchor = idx[300].date()
+    for i in range(200):
+        beta = 0.6 + 1.2 * rng3.random()
+        drift = rng3.normal(0.0002, 0.0001)
+        s = R._synthetic("2025-01-01", len(idx), drift, beta=beta, market=mkt)
+        treated = i % 2 == 0
+        if treated:                     # add the excess strictly AFTER the anchor
+            bump = pd.Series(1.0, index=s.index)
+            bump.loc[s.index > pd.Timestamp(anchor)] = 1.0 + INJECT
+            s = s * bump
+        names.append({"ticker": f"X{i}", "symbol": f"X{i}", "treated": treated,
+                      "beta_true": beta, "market_cap": float(np.exp(rng3.normal(23, 1.0))),
+                      "dividend_yield": float(rng3.uniform(0, 3)),
+                      "sector": ["Tech", "Health", "Fin"][i % 3],
+                      "adv_usd": 500e6, "anchor": anchor.isoformat()})
+        series[f"X{i}"] = s
+    frame = pd.DataFrame(names).set_index("ticker")
+    sessions = [d.date() for d in idx]
+    data_asof = idx[-1].date()
+    wr = measure_week(frame, anchor, "1m", lambda sym: series.get(sym), mkt,
+                      sessions, data_asof)
+    check("every name measured -- no silent drops", len(wr) == 200, f"{len(wr)} of 200")
+    check("trailing beta recovered from the path",
+          abs((wr["beta"] - frame.loc[wr.index, "beta_true"]).abs().mean()) < 0.02,
+          f"mean abs err {(wr['beta'] - frame.loc[wr.index, 'beta_true']).abs().mean():.4f}")
+    check("weekly residual mean is zero across the FULL universe",
+          abs(wr["neutral"].mean()) < 1e-10, f"{wr['neutral'].mean():.2e}")
+    treated_alpha = wr.loc[wr.index[frame.loc[wr.index, "treated"]], "neutral"].mean()
+    untreated_alpha = wr.loc[wr.index[~frame.loc[wr.index, "treated"]], "neutral"].mean()
+    check("injected 3% excess is recovered on the treated half",
+          abs(treated_alpha - INJECT / 2) < 0.006, f"{treated_alpha:.4f} (half of {INJECT} "
+          f"because the residual is centred on the whole universe)")
+    check("untreated half carries the mirror image, not alpha of its own",
+          abs(treated_alpha + untreated_alpha) < 1e-10,
+          f"{treated_alpha:.4f} vs {untreated_alpha:.4f}")
+    # The guard that matters: a scheme selecting purely on HIGH BETA must score zero.
+    # Drawn across the WHOLE universe -- treatment is assigned independently of beta,
+    # so a beta-only selection should land half on each side and net to nothing. (An
+    # earlier version of this check intersected with the untreated half, which merely
+    # re-measured the mirror image and would have "failed" a correct loop.)
+    hb = wr.loc[wr.index[wr["beta"] > wr["beta"].median()], "neutral"]
+    check("a pure high-beta selection earns no alpha -- guard 2 of the memo holds",
+          abs(hb.mean()) < 0.005, f"{hb.mean():.4f} on {len(hb)} names")
+
+    print("\ndrift-matched null (register row 8(b))")
+    # A null that ignores drift is a weaker null. Build a universe where high-drift
+    # names carry a real excess, then have the "scheme" pick exactly the top drift
+    # decile: a matched null must find that unremarkable, an unmatched one would
+    # call it a discovery.
+    nn = 300
+    d_rng = np.random.default_rng(5)
+    drift_v = d_rng.normal(0, 0.0004, nn)
+    neutral_v = 40.0 * drift_v + d_rng.normal(0, 0.002, nn)      # alpha IS the drift
+    wr2 = pd.DataFrame({"drift": drift_v, "neutral": neutral_v},
+                       index=[f"D{i}" for i in range(nn)])
+    dec2 = pd.qcut(wr2["drift"].rank(method="first"), 10, labels=False)
+    top = set(wr2.index[dec2 == 9])
+    obs2 = wr2.loc[list(top), "neutral"].mean()
+    r2 = np.random.default_rng(17)
+    matched, unmatched = [], []
+    pool_top = np.flatnonzero((dec2 == 9).to_numpy())
+    vals2 = wr2["neutral"].to_numpy()
+    for _ in range(400):
+        matched.append(vals2[r2.choice(pool_top, len(top), replace=False)].mean())
+        unmatched.append(vals2[r2.choice(nn, len(top), replace=False)].mean())
+    p_matched = float(np.mean(np.array(matched) >= obs2))
+    p_unmatched = float(np.mean(np.array(unmatched) >= obs2))
+    check("a drift-MATCHED null finds a pure drift pick unremarkable",
+          p_matched > 0.10, f"p = {p_matched:.3f}")
+    check("an UNMATCHED null would have called the same pick a discovery",
+          p_unmatched < 0.01, f"p = {p_unmatched:.3f} -- this is what 8(b) prevents")
+
+    print("\ncost accounting")
+    f2 = pd.DataFrame({"adv_usd": [500e6, 500e6, 15e6]}, index=["A", "B", "C"])
+    c_all_new = cohort_cost({"A", "B"}, f2, set())
+    check("a fresh cohort pays a full round trip", abs(c_all_new - 0.0006) < 1e-12)
+    c_retained = cohort_cost({"A", "B"}, f2, {"A", "B"})
+    check("a fully retained cohort pays nothing at the roll", c_retained == 0.0)
+    c_mixed = cohort_cost({"A", "C"}, f2, {"A"})
+    check("only the new name pays, and at its own tier",
+          abs(c_mixed - (2 * 15 / 10_000) / 2) < 1e-12, f"{c_mixed:.6f}")
+
     print(f"\n[analyse] selftest {'OK' if ok else 'FAILED'}")
     return 0 if ok else 1
 
@@ -551,10 +819,89 @@ def main() -> int:
               "pre-registration is exactly that it binds when the data is tempting.")
         return 1
 
-    print("[analyse] gate open. Implementation choices in force (register them "
-          "before quoting any number):")
+    print("[analyse] gate open. Implementation choices in force (register row 8):")
     print(REGISTER_CANDIDATES)
-    print("[analyse] Panel measurement requires NDU and is run from here.")
+
+    import exchange_calendars as xcals
+    import norgate as ng
+
+    n = ng.connect()
+    market = R.market_series(n)
+    data_asof = ng.last_completed_session()
+    cal = xcals.get_calendar("XNYS")
+    first = dt.date.fromisoformat(merges[0]["as_of"]) - dt.timedelta(days=400)
+    sessions = [d.date() for d in cal.sessions_in_range(
+        pd.Timestamp(first), pd.Timestamp(data_asof))]
+
+    cache: dict = {}
+
+    def get_series(sym: str):
+        if sym not in cache:
+            try:
+                cache[sym] = R.stock_series(sym, n)
+            except Exception:                      # a name the live feed cannot resolve
+                cache[sym] = None
+        return cache[sym]
+
+    print(f"[analyse] measuring {len(merges) - 1} formation weeks against a feed "
+          f"through {data_asof}...")
+    panel = run_panel(merges, get_series, market, sessions, data_asof)
+    print(f"[analyse] {len(panel['weeks'])} cohort weeks measured; "
+          f"universe residual mean {np.nanmean(panel['universe_resid']):.2e} "
+          f"(must be ~0 -- the EW universe is the embedded benchmark)")
+
+    verdict_ok = (state["captures"] >= VERDICT_CAPTURES
+                  and state["matured"] >= VERDICT_COHORTS)
+    pvals, out = {}, {}
+    for s in SCHEMES:
+        net = np.array(panel["net"][s][PRIMARY], dtype=float)
+        pt = float(np.nanmean(net)) if net.size else float("nan")
+        lo, hi, nobs = block_bootstrap_ci(net)
+        p = null_pvalue(merges, panel, s, PRIMARY, get_series, market,
+                        sessions, data_asof)
+        pvals[s] = 1.0 if p is None else p
+        signs = {h: float(np.nanmean(panel["net"][s][h])) for h in R.HORIZONS}
+        sign_stable = (not math.isnan(pt) and pt != 0
+                       and all(np.sign(v) == np.sign(pt) for v in signs.values()
+                               if not math.isnan(v)))
+        sd = float(np.nanstd(net, ddof=1)) if net.size > 1 else float("nan")
+        sr = pt / sd if sd and not math.isnan(sd) and sd > 0 else None
+        out[s] = {"alpha_1m": pt, "ci95": [lo, hi], "n_cohorts": nobs,
+                  "null_p": p, "sign_stable": sign_stable,
+                  "by_horizon": signs, "sharpe": sr,
+                  "dsr": deflated_sharpe(sr, nobs or 0, len(SCHEMES)) if sr else None,
+                  "turnover": float(np.nanmean(panel["turnover"][s]))}
+
+    fdr = bh_fdr(pvals)
+    print(f"\n{'scheme':<7}{'alpha 1m':>10}{'95% CI':>22}{'null p':>9}"
+          f"{'FDR':>6}{'sign':>6}{'turn':>7}")
+    for s in SCHEMES:
+        o = out[s]
+        ci = (f"[{o['ci95'][0]:+.4f},{o['ci95'][1]:+.4f}]"
+              if o["ci95"][0] is not None else "        n/a")
+        keep = (o["ci95"][0] is not None and o["ci95"][0] > 0
+                and fdr[s] and o["sign_stable"])
+        out[s]["keep"] = keep if verdict_ok else None
+        print(f"{s:<7}{o['alpha_1m']:>+10.4f}{ci:>22}"
+              f"{(o['null_p'] if o['null_p'] is not None else float('nan')):>9.3f}"
+              f"{('yes' if fdr[s] else 'no'):>6}"
+              f"{('yes' if o['sign_stable'] else 'no'):>6}"
+              f"{o['turnover']:>7.2f}")
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = dt.date.today().isoformat()
+    payload = {"generated": stamp, "captures": state["captures"],
+               "matured_cohorts": state["matured"], "verdict_eligible": verdict_ok,
+               "register_row": 8, "schemes": out, "weeks": panel["weeks"]}
+    (OUT_DIR / f"analysis_{stamp}.json").write_text(
+        json.dumps(payload, indent=2, default=float), encoding="utf-8")
+
+    if not verdict_ok:
+        print("\n[analyse] INTERIM READ -- NO VERDICT. The KEEP column is withheld, not "
+              "computed-and-hidden: below 26 captures and 20 matured cohorts the "
+              "time-block bootstrap holds too few independent blocks to be reliable, "
+              "so a KEEP here would be a number without the property it claims.")
+    print(f"[analyse] wrote {(OUT_DIR / f'analysis_{stamp}.json')}")
     return 0
 
 
