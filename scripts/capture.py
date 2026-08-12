@@ -13,7 +13,7 @@ weekly chain:
 
 Usage:
     python scripts/capture.py --file "C:\\Users\\phuaz\\Downloads\\export.csv" --asof 2026-07-30
-    python scripts/capture.py --latest --asof 2026-07-30      # newest CSV in Downloads
+    python scripts/capture.py --latest --asof 2026-07-30      # newest CSV in Downloads or the OneDrive project folder
     python scripts/capture.py --file ... --validate-only      # guards only, touch nothing
     python scripts/capture.py --latest --push                 # also commit + push the public page
     python scripts/capture.py --latest --daily                # daily event log entry (~15s, panel untouched)
@@ -39,6 +39,14 @@ import ingest  # noqa: E402 -- reuse the locked column contract
 
 ONEDRIVE = Path.home() / "OneDrive" / "Main" / "tipranks-signal"
 DOWNLOADS = Path.home() / "Downloads"
+# --latest searches both, newest wins: the browser saves to Downloads, but an
+# export moved to the project's OneDrive folder before capture is just as valid
+# a source and was previously invisible to --latest.
+LATEST_DIRS = (DOWNLOADS, ONEDRIVE)
+# Filed archives live in ONEDRIVE under this prefix (see the filing steps in
+# main()). They must never be offered back as a fresh export -- re-capturing a
+# filed file would be a silent duplicate of a capture already in the panel.
+FILED_PREFIX = "tipranks_"
 SNAP_DIR = ROOT / "data" / "snapshots"
 EXPORT_DIR = ROOT / "data" / "exports"
 # --- daily event log ------------------------------------------------------
@@ -236,12 +244,28 @@ def run(cmd: list[str], label: str) -> None:
         sys.exit(f"[capture] ABORTED -- {label} failed (exit {res.returncode})")
 
 
+def latest_export():
+    """Newest candidate export across LATEST_DIRS, or None.
+
+    Already-filed archives are excluded by name: offering one back would
+    re-capture a file the panel already holds, and the freshness guard would
+    only catch it if the content happened to be identical.
+    """
+    cands = [p for d in LATEST_DIRS if d.is_dir()
+             for p in d.glob("*.csv")
+             if not p.name.startswith(FILED_PREFIX)]
+    cands.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return cands[0] if cands else None
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__)
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", help="path to the screener export CSV")
-    src.add_argument("--latest", action="store_true", help="use the newest CSV in Downloads")
+    src.add_argument("--latest", action="store_true",
+                     help="use the newest CSV in Downloads or the OneDrive tipranks-signal folder "
+                          "(already-filed tipranks_*.csv archives are ignored)")
     ap.add_argument("--asof", help="capture date YYYY-MM-DD (default: today)")
     ap.add_argument("--validate-only", action="store_true", help="run the guards and stop")
     ap.add_argument("--force", action="store_true", help="allow overwriting an existing capture date")
@@ -252,11 +276,11 @@ def main() -> int:
     a = ap.parse_args()
 
     if a.latest:
-        cands = sorted(DOWNLOADS.glob("*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not cands:
-            sys.exit(f"[capture] no CSV found in {DOWNLOADS}")
-        csv_path = cands[0]
-        print(f"[capture] newest CSV in Downloads: {csv_path.name} "
+        csv_path = latest_export()
+        if csv_path is None:
+            searched = " or ".join(str(d) for d in LATEST_DIRS)
+            sys.exit(f"[capture] no CSV found in {searched}")
+        print(f"[capture] newest CSV in {csv_path.parent}: {csv_path.name} "
               f"({dt.datetime.fromtimestamp(csv_path.stat().st_mtime):%Y-%m-%d %H:%M})")
     else:
         csv_path = Path(a.file)
