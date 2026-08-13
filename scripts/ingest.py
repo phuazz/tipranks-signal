@@ -196,8 +196,57 @@ def expand_exports(paths) -> list[Path]:
     return out
 
 
+def _assert_forward_only(dest: Path, out: Path, asof: dt.date, payload: dict,
+                         force_overwrite: bool) -> None:
+    """The weekly panel is FROZEN at capture: no past date is ever written or
+    revised from a later view of the site (guard 1 of the study). Coded here,
+    not left to discipline.
+
+    - a re-run from the SAME export bytes is idempotent and passes;
+    - overwriting the LATEST snapshot with different content needs an explicit
+      --force-overwrite (a same-day correction, before accrual continues);
+    - a snapshot dated before the newest existing one is REFUSED outright, and
+      there is no flag. A genuinely contemporaneous export filed late is a
+      register matter (dated row in RESEARCH_MEMO.md documenting provenance),
+      not an ingest code path."""
+    existing = []
+    for p in dest.glob("snapshot_*.json"):
+        stem = p.stem.replace("snapshot_", "")[:10]
+        try:
+            existing.append(dt.date.fromisoformat(stem))
+        except ValueError:
+            continue
+    if not existing:
+        return
+    newest = max(existing)
+    if asof < newest:
+        raise SystemExit(
+            f"[ingest] REFUSED: as-of {asof} predates the newest frozen snapshot "
+            f"({newest}). Snapshots accrue forward only; a past date is never "
+            "written from a later export. A genuinely contemporaneous export "
+            "filed late is a register decision (dated row in RESEARCH_MEMO.md), "
+            "not an ingest flag.")
+    if out.exists():
+        try:
+            prior = json.loads(out.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 -- a corrupt file is not "the same bytes"
+            prior = None
+        if prior is not None and prior.get("source_sha256") == payload["source_sha256"]:
+            return                                  # idempotent re-run, same bytes
+        if not force_overwrite:
+            raise SystemExit(
+                f"[ingest] REFUSED: {out.name} already exists with different "
+                "source bytes. The weekly panel is frozen at capture. A same-day "
+                "correction of the LATEST snapshot may pass --force-overwrite; "
+                "anything else is a revision of the frozen panel.")
+        # force_overwrite reaches only the newest date: an earlier as-of was
+        # already refused above, and an existing file at a later as-of than
+        # `newest` cannot exist by construction.
+
+
 def ingest(exports, asof: dt.date, out_dir: Path | None = None,
-           out_name: str | None = None, captured_at: str | None = None) -> Path:
+           out_name: str | None = None, captured_at: str | None = None,
+           force_overwrite: bool = False, frozen_panel: bool | None = None) -> Path:
     files = expand_exports(exports)
     frames, shas = [], {}
     for f in files:
@@ -226,13 +275,20 @@ def ingest(exports, asof: dt.date, out_dir: Path | None = None,
         "records": records,
     }
     # out_dir lets the daily event log write to its own stream (data/daily/)
-    # without touching the frozen weekly panel in data/snapshots/.
+    # without touching the frozen weekly panel in data/snapshots/. The freeze
+    # guard binds the weekly panel; the daily log orders by (date, time) and
+    # takes several captures a day, so it is outside the guard by design.
     dest = out_dir or SNAP_DIR
     dest.mkdir(parents=True, exist_ok=True)
     out = dest / (out_name or f"snapshot_{asof.isoformat()}.json")
+    frozen = frozen_panel if frozen_panel is not None \
+        else dest.resolve() == SNAP_DIR.resolve()
+    if frozen:
+        _assert_forward_only(dest, out, asof, payload, force_overwrite)
     out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
     src = f"{len(files)} page-files" if len(files) > 1 else files[0].name
-    print(f"[ingest] {len(records)} names from {src} -> {out.relative_to(ROOT)}  ({weekday})")
+    shown = out.relative_to(ROOT) if out.is_relative_to(ROOT) else out
+    print(f"[ingest] {len(records)} names from {src} -> {shown}  ({weekday})")
     if unmapped:
         print(f"[ingest] UNMAPPED columns (extend COLUMN_MAP): {unmapped}", file=sys.stderr)
     if payload["as_of_is_weekend"]:
@@ -244,6 +300,40 @@ def ingest(exports, asof: dt.date, out_dir: Path | None = None,
 
 
 def selftest() -> int:
+    # --- freeze guard: forward-only writes on the weekly panel ---
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        panel = Path(td) / "panel"
+        csv1 = Path(td) / "e1.csv"
+        csv1.write_text("Ticker,Price\nAAA,$10.00\n", encoding="utf-8")
+        csv2 = Path(td) / "e2.csv"
+        csv2.write_text("Ticker,Price\nAAA,$11.00\n", encoding="utf-8")
+        ingest([csv1], dt.date(2026, 1, 9), out_dir=panel, frozen_panel=True)
+        ingest([csv1], dt.date(2026, 1, 9), out_dir=panel, frozen_panel=True)   # idempotent
+        ingest([csv1], dt.date(2026, 1, 16), out_dir=panel, frozen_panel=True)  # forward
+        refused = False
+        try:
+            ingest([csv1], dt.date(2026, 1, 2), out_dir=panel, frozen_panel=True)
+        except SystemExit:
+            refused = True
+        assert refused, "a backdated snapshot must be refused"
+        refused = False
+        try:
+            ingest([csv2], dt.date(2026, 1, 16), out_dir=panel, frozen_panel=True)
+        except SystemExit:
+            refused = True
+        assert refused, "silent revision of a frozen snapshot must be refused"
+        ingest([csv2], dt.date(2026, 1, 16), out_dir=panel, frozen_panel=True,
+               force_overwrite=True)               # latest-date correction, explicit
+        refused = False
+        try:
+            ingest([csv2], dt.date(2026, 1, 9), out_dir=panel, frozen_panel=True,
+                   force_overwrite=True)
+        except SystemExit:
+            refused = True
+        assert refused, "force must never reach a backdated write"
+    print("[selftest] freeze guard: forward-only writes enforced on the weekly panel")
+
     # --- date edge cases (library only; no memory weekdays) ---
     # month boundary: February only has 29 days in a leap year
     assert dt.date.fromisoformat("2024-02-29").month == 2
@@ -320,6 +410,9 @@ def main() -> int:
                     help="capture instant, Singapore local ISO-8601. Register row 7: the "
                          "weekly panel recorded only a DATE, so the confirmation window's "
                          "boundary could not be tested against the capture instant")
+    ap.add_argument("--force-overwrite", action="store_true",
+                    help="allow a same-day correction of the LATEST frozen snapshot. "
+                         "Backdated writes stay refused regardless")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -328,7 +421,8 @@ def main() -> int:
     if not args.export:
         ap.error("--export is required (or use --selftest)")
     asof = dt.date.fromisoformat(args.asof) if args.asof else dt.date.today()
-    ingest(args.export, asof, captured_at=args.captured_at)
+    ingest(args.export, asof, captured_at=args.captured_at,
+           force_overwrite=args.force_overwrite)
     return 0
 
 

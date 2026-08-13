@@ -20,19 +20,20 @@ FROZEN BY THE MEMO (never change without a dated register row)
   gates       interim read unlocks at 8 captures and carries NO verdict; verdict
               eligibility needs >= 26 captures AND >= 20 matured 1m cohorts
 
-IMPLEMENTATION CHOICES NOT FIXED BY THE MEMO -- see REGISTER_CANDIDATES below.
-The memo names "episode-block bootstrap" without fixing a block length, names the
-"drift-matched random-entry null" without fixing how drift is matched, and names an
-"insider axis (+1/0/-1)" without mapping the vendor's strings onto it. Those are
-decided here, stated here, and must be registered before any read is taken -- the
-row-6 precedent: the only moment such choices provably cannot be tuned to a result
-is before a forward window has matured.
+IMPLEMENTATION CHOICES NOT FIXED BY THE MEMO -- register rows 8 and 9, printable
+with --register. Row 8 (2026-08-08, while provably blind) fixed the block length,
+the null matching, the insider mapping, the S1a direction and full-universe
+fitting. Row 9 (2026-08-13, pre-flight -- gate still shut, no measurement ever
+run) wired the row-3 retention band and episode netting, formation-time-only
+selection, the delisted market leg, the uncosted null, realised DSR moments,
+N_eff context and delisted-symbol resolution, and repaired the S2 null defect.
 
 Reads data/merged/ (which carries Norgate returns) and pulls price history, so
 unlike the diagnostics this DOES touch forward returns. That is the point of it,
 and it is why the accrual guards below are hard refusals rather than warnings.
 
     python scripts/analyse.py --selftest      # synthetic; runs offline, no NDU
+    python scripts/fixture_check.py           # end-to-end synthetic fixture panels
     python scripts/analyse.py                 # guarded; refuses below 8 captures
     python scripts/analyse.py --force-interim # interim read, NO verdict, once >= 8
 
@@ -46,6 +47,7 @@ import datetime as dt
 import json
 import math
 import sys
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -80,7 +82,49 @@ NULL_DRAWS = 1000
 FDR_Q = 0.10
 WINSOR = (0.01, 0.99)
 
-REGISTER_CANDIDATES = """
+REGISTER_ROW9 = """
+  (f) RETENTION BAND AND EPISODE NETTING (conformance to register row 3).
+      Ranked constructions (S1c, S2) re-enter a maturing name without a round
+      trip while it sits inside twice the entry threshold -- for the
+      class-built S1c bucket, the smallest top set of score classes reaching
+      180 names; for S2, the top two deciles of the residualised composite.
+      Event buckets re-enter only on a fresh qualifying event. Costs are
+      charged per holding EPISODE: a name held through any of the four live
+      cohorts is not sold and rebought when it re-enters, so only a name
+      entering from flat pays, once, at its entering cohort. The prior code
+      netted against the immediately preceding cohort alone and carried no
+      band, which overstated costs and turnover and dropped band names.
+  (g) FORMATION FROM FORMATION-TIME INFORMATION ONLY. Selection and cohort
+      formation run on every week from trailing data (risk_frame);
+      measurement fills in matured horizons afterwards. The prior code formed
+      S2 on the measured frame, letting forward maturity select the formation
+      universe. Horizon series stay aligned on weeks with a measured PRIMARY
+      window, so cross-horizon comparisons read the same weeks.
+  (h) DELISTED WINDOW, MARKET LEG. The beta leg of a delisted window covers
+      the name's lived sessions (market_return_between), mirroring the
+      registered per-session drift proration -- one window, every component.
+      Stated plainly: not uniformly conservative in either direction;
+      symmetric-window is the like-for-like reading.
+  (i) NULL IS UNCOSTED, AND CONSUMES THE REALISED COHORTS. The observed
+      statistic is net of the scheme's costs; the drift-matched null pays
+      nothing, which hands the null a cost advantage and makes the test
+      stricter. The null resamples the exact cohorts the panel measured; the
+      prior code re-ran selection and never built S2's picks, leaving S2's
+      null p-value silently at 1.0 -- a scheme that could never pass KEEP.
+  (j) DSR MOMENTS REALISED. Skewness and kurtosis in the deflated Sharpe come
+      from the realised net cohort series (Gaussian fallback below 8
+      observations); the trial-variance term keeps the estimation-variance
+      proxy. Effective N is reported alongside as context only:
+      N_eff = (sum lambda)^2 / sum lambda^2 over the eigenvalues of the
+      net-return correlation matrix (the em-rotation-lab convention).
+  (k) DELISTED-SYMBOL RESOLUTION. A liquid name that resolved at capture but
+      not on the live feed at analyse time is looked up in the delisted
+      database (suffixed namespace, span-checked against the name's earliest
+      anchor) and measured with the authoritative delisted flag; resolution
+      failures are REPORTED as survivorship holes, never silently dropped.
+"""
+
+REGISTER_ROW8 = """
   (a) BOOTSTRAP BLOCK LENGTH = 4 weekly cohorts. The memo fixes "episode-block" /
       "time-blocked" but not the length. Four is the cohort overlap itself: with
       4-week overlapping cohorts a name appears in four consecutive weekly cohort
@@ -119,8 +163,9 @@ REGISTER_CANDIDATES = """
 # panel assembly
 # --------------------------------------------------------------------------
 
-def load_merges() -> list[dict]:
-    files = sorted(MERGE_DIR.glob("merged_*.json")) if MERGE_DIR.exists() else []
+def load_merges(merge_dir: Path | None = None) -> list[dict]:
+    d = merge_dir or MERGE_DIR
+    files = sorted(d.glob("merged_*.json")) if d.exists() else []
     return [json.loads(f.read_text(encoding="utf-8")) for f in files]
 
 
@@ -199,15 +244,21 @@ def top_decile_by_class(scores: pd.Series, min_names: int = DECILE_MIN_NAMES) ->
 # --------------------------------------------------------------------------
 
 def select(prev: dict, curr: dict) -> dict:
-    """Return {scheme: set(tickers)} plus the week's feature frame."""
+    """Return {scheme: set(tickers)}, the S1c retention band, and the week's
+    feature frame.
+
+    The frame covers the FULL current liquid universe (register rows 3 and
+    8(e)): S1c and the style fit are level constructions on the week's
+    universe, so a name need not appear in the prior snapshot to join them.
+    Week-on-week quantities for a name without a prior-snapshot pairing read
+    as no-event (S1a/S1b False, revision 0.0), never as an exclusion."""
     p, c = liquid_map(prev), liquid_map(curr)
     p_asof = dt.date.fromisoformat(prev["as_of"])
     c_asof = dt.date.fromisoformat(curr["as_of"])
-    paired = [t for t in c if t in p]
 
     rows = []
-    for t in paired:
-        a, b = p[t], c[t]
+    for t, b in c.items():
+        a = p.get(t) or {}
         ca, cb = a.get("analyst_consensus"), b.get("analyst_consensus")
         label_up = (ca in RANK and cb in RANK and RANK[cb] < RANK[ca])
         label_dn = (ca in RANK and cb in RANK and RANK[cb] > RANK[ca])
@@ -239,7 +290,7 @@ def select(prev: dict, curr: dict) -> dict:
         })
     df = pd.DataFrame(rows).set_index("ticker")
     if df.empty:
-        return {"picks": {s: set() for s in SCHEMES}, "frame": df}
+        return {"picks": {s: set() for s in SCHEMES}, "bands": {}, "frame": df}
 
     picks = {}
     picks["S1a"] = set(df.index[df["s1a"]])
@@ -249,26 +300,40 @@ def select(prev: dict, curr: dict) -> dict:
     # S3: S1a AND 3m TR above the liquid-universe median AND no net insider selling.
     med_tr = df["tr_3m_pct"].median()
     picks["S3"] = set(df.index[df["s1a"] & (df["tr_3m_pct"] > med_tr) & df["no_net_selling"]])
-    return {"picks": picks, "frame": df, "median_tr_3m": med_tr}
+
+    # Register row 3 retention: a ranked construction re-enters a maturing name
+    # while it sits inside twice the entry threshold. For the class-built S1c
+    # bucket that is the smallest top set of score classes reaching twice the
+    # entry floor; S2's band comes from its composite in build_s2.
+    bands = {"S1c": top_decile_by_class(df["smart_score"],
+                                        min_names=2 * DECILE_MIN_NAMES)}
+    return {"picks": picks, "bands": bands, "frame": df, "median_tr_3m": med_tr}
 
 
-def build_s2(df: pd.DataFrame, beta: pd.Series) -> set:
-    """Equal-weight composite of three winsorised z-scores, residualised, top decile.
+def build_s2(df: pd.DataFrame, beta: pd.Series) -> tuple[set, set]:
+    """S2 entry and retention-band sets from the residualised composite.
 
-    S2's defining feature is construction-level neutralisation: the composite is
-    residualised BEFORE ranking, so the decile is chosen on style-neutral signal
-    rather than on a signal that happens to load on size or yield."""
+    Equal-weight composite of three winsorised z-scores, residualised BEFORE
+    ranking -- construction-level neutralisation is S2's defining feature, so
+    the decile is chosen on style-neutral signal rather than on a signal that
+    happens to load on size or yield. Entry = top decile; band = top two
+    deciles (register row 3: twice the entry threshold). The formation
+    universe is every liquid name with a computable trailing beta -- a
+    formation-time quantity, so the future never selects the universe."""
     work = df.copy()
     work["beta"] = beta.reindex(work.index)
+    work = work.loc[work["beta"].notna()]
+    if work.empty:
+        return set(), set()
     comp = (_zscore(_winsorise(work["rating_ind"]))
             + _zscore(_winsorise(work["bt_pct"]))
             + _zscore(_winsorise(work["insider"]))) / 3.0
     work["_comp"] = comp
     resid = residualise(work, "_comp")
     if resid.dropna().empty:
-        return set()
-    cut = resid.quantile(0.90)
-    return set(resid.index[resid >= cut])
+        return set(), set()
+    return (set(resid.index[resid >= resid.quantile(0.90)]),
+            set(resid.index[resid >= resid.quantile(0.80)]))
 
 
 # --------------------------------------------------------------------------
@@ -332,6 +397,41 @@ def bh_fdr(pvals: dict, q: float = FDR_Q) -> dict:
     return passed
 
 
+def effective_n(net: dict, horizon: str) -> float | None:
+    """Effective independent scheme count from realised net-return
+    correlations: N_eff = (sum lambda)^2 / sum lambda^2 over the eigenvalues
+    of the correlation matrix (the em-rotation-lab convention). Context only
+    -- the DSR itself is computed at nominal N = 5 per the memo."""
+    df = pd.DataFrame({s: pd.Series(net[s][horizon], dtype=float)
+                       for s in SCHEMES}).dropna()
+    if len(df) < 8:
+        return None
+    df = df.loc[:, df.std(ddof=1) > 0]
+    if df.shape[1] < 2:
+        return None
+    corr = df.corr().to_numpy()
+    if np.isnan(corr).any():
+        return None
+    lam = np.clip(np.linalg.eigvalsh(corr), 0.0, None)
+    denom = float((lam ** 2).sum())
+    return float(lam.sum() ** 2 / denom) if denom > 0 else None
+
+
+def realised_moments(x) -> tuple[float, float]:
+    """Skewness and RAW kurtosis of the realised net series for the DSR
+    (register row 9(j)). Gaussian fallback when the series is too short for
+    the higher moments to mean anything."""
+    x = np.asarray(x, dtype=float)
+    x = x[~np.isnan(x)]
+    if x.size < 8:
+        return 0.0, 3.0
+    s = pd.Series(x)
+    sk, ku = float(s.skew()), float(s.kurt()) + 3.0   # pandas kurt() is EXCESS kurtosis
+    if not (math.isfinite(sk) and math.isfinite(ku)):
+        return 0.0, 3.0
+    return sk, ku
+
+
 def deflated_sharpe(sr: float, n_obs: int, n_trials: int,
                     skew: float = 0.0, kurt: float = 3.0) -> float | None:
     """DSR at nominal N (memo: nominal N = 5; effective N reported as context)."""
@@ -376,74 +476,119 @@ def _norm_ppf(p: float) -> float:
 # panel measurement
 # --------------------------------------------------------------------------
 
-def measure_week(frame: pd.DataFrame, anchor: dt.date, horizon: str,
-                 get_series, market: pd.Series, sessions, data_asof: dt.date,
-                 delisted_known=None) -> pd.DataFrame:
-    """One formation week: raw -> drift-adjusted -> style-neutral, FULL universe.
+def risk_frame(frame: pd.DataFrame, anchor: dt.date, get_series,
+               market: pd.Series) -> pd.DataFrame:
+    """Trailing beta and idiosyncratic drift for every liquid name, from data
+    at or before the anchor ONLY.
 
-    The residual is fitted on every liquid name with a computable adjusted return,
-    never on the selected subset (register row 8(e)) -- that is what makes the
-    weekly residual mean zero and the EW universe the embedded benchmark. A scheme's
-    alpha is then simply the mean residual over its picks.
-    """
+    Formation-time knowledge: S2's construction and the retention chain need
+    this on every formation week, including weeks whose forward windows have
+    not matured -- gating formation on measurability would let the future
+    select the universe (register row 9(g)). A short history is refused,
+    never shrunk (register row 6(b))."""
     mkt = R._closes(market)
     out = {}
     for t, row in frame.iterrows():
         s = get_series(row["symbol"])
         if s is None or len(s) < R.MIN_TRAILING:
             continue
+        risk = R.trailing_risk(s, mkt, anchor)
+        if risk["beta"] is None:
+            continue
+        out[t] = {"beta": risk["beta"], "drift": risk["drift_per_session"]}
+    if not out:
+        return pd.DataFrame(columns=["beta", "drift"])
+    return pd.DataFrame(out).T.astype(float)
+
+
+def measure_week(frame: pd.DataFrame, risk: pd.DataFrame, anchor: dt.date,
+                 horizon: str, get_series, market: pd.Series, sessions,
+                 data_asof: dt.date, delisted_known=None) -> pd.DataFrame:
+    """One formation week: raw -> drift-adjusted -> style-neutral, FULL universe.
+
+    The residual is fitted on every liquid name with a computable adjusted return,
+    never on the selected subset (register row 8(e)) -- that is what makes the
+    weekly residual mean zero and the EW universe the embedded benchmark. A scheme's
+    alpha is then simply the mean residual over its picks.
+
+    On a DELISTED window the market leg covers the name's lived sessions, not
+    the full horizon (register row 9(h)): the drift leg is already prorated
+    per session, and every removed component must cover the same window.
+    """
+    mkt = R._closes(market)
+    out = {}
+    for t in risk.index:
+        s = get_series(frame.at[t, "symbol"])
+        if s is None:
+            continue
         fr = R.forward_return(s, anchor, horizon, data_asof,
                               delisted_known=(delisted_known or {}).get(t))
         if fr["ret_frac"] is None:
             continue
-        risk = R.trailing_risk(s, mkt, anchor)
-        if risk["beta"] is None:
-            continue          # a short history is refused, never shrunk
-        mfr = R.forward_return(mkt, fr["entry_date"], horizon, data_asof)
-        if mfr["ret_frac"] is None:
+        if fr["delisted"]:
+            m_ret = R.market_return_between(mkt, fr["entry_date"], fr["exit_date"])
+        else:
+            m_ret = R.forward_return(mkt, fr["entry_date"], horizon, data_asof)["ret_frac"]
+        if m_ret is None:
             continue
         n_sess = R.sessions_between(fr["entry_date"], fr["exit_date"], sessions)
-        adj = R.drift_adjust(fr["ret_frac"], mfr["ret_frac"], risk["beta"],
-                             risk["drift_per_session"], n_sess)
-        out[t] = {"raw": fr["ret_frac"], "adj": adj, "beta": risk["beta"],
-                  "drift": risk["drift_per_session"], "delisted": fr["delisted"]}
+        adj = R.drift_adjust(fr["ret_frac"], m_ret, float(risk.at[t, "beta"]),
+                             float(risk.at[t, "drift"]), n_sess)
+        out[t] = {"raw": fr["ret_frac"], "adj": adj, "delisted": fr["delisted"]}
     if not out:
         return pd.DataFrame()
     res = pd.DataFrame(out).T
     joined = frame.join(res, how="inner")
+    joined["raw"] = pd.to_numeric(joined["raw"], errors="coerce")
+    joined["adj"] = pd.to_numeric(joined["adj"], errors="coerce")
+    joined["beta"] = risk["beta"].reindex(joined.index)
+    joined["drift"] = risk["drift"].reindex(joined.index)
     joined["neutral"] = residualise(joined, "adj")
     return joined
 
 
-def cohort_cost(picks: set, frame: pd.DataFrame, prev_picks: set,
-                flat_bps: float | None = None) -> float:
-    """Mean round-trip cost across the cohort, in return fraction.
+def cohort_cost(cohort: set, frame: pd.DataFrame, held: set,
+                flat_bps: float | None = None) -> tuple[float, set]:
+    """Mean round-trip cost across the cohort, and the names actually charged.
 
-    Charged on actual trades only (memo). A name also held in the immediately
-    preceding cohort of the same scheme was not sold and rebought, so it pays
-    nothing at the roll; everything else pays a full round trip. This is the
-    CONSERVATIVE reading of the book-level netting the memo describes -- it never
-    assumes a trade was avoided unless the prior cohort demonstrably held the name.
-    """
-    if not picks:
-        return 0.0
-    tot = 0.0
-    for t in picks:
-        if t in prev_picks:
-            continue
-        adv = float(frame.loc[t, "adv_usd"]) if t in frame.index else 0.0
-        tot += round_trip_cost_frac(adv, flat_bps)
-    return tot / len(picks)
+    Charged on actual trades only (memo, Measurement), at holding-EPISODE
+    level (register row 9(f)): a name already held through any of the four
+    live cohorts -- including the one maturing at this roll -- is not sold
+    and rebought when it re-enters, so it pays nothing. One continuous
+    holding episode pays exactly one round trip, charged to the cohort that
+    opened it. `held` is the union of the prior four cohorts."""
+    if not cohort:
+        return 0.0, set()
+    charged = {t for t in cohort if t not in held}
+    tot = sum(round_trip_cost_frac(
+        float(frame.at[t, "adv_usd"]) if t in frame.index else 0.0, flat_bps)
+        for t in charged)
+    return tot / len(cohort), charged
 
 
 def run_panel(merges: list[dict], get_series, market: pd.Series, sessions,
-              data_asof: dt.date, horizons=None, flat_bps=None) -> dict:
-    """Assemble the weekly cohort-return series for every scheme and horizon."""
+              data_asof: dt.date, horizons=None, delisted_known=None) -> dict:
+    """Assemble weekly cohorts and their measured returns for every scheme.
+
+    Selection and cohort formation run on EVERY formation week from
+    formation-time information alone; measurement then fills in whichever
+    horizons have matured. Horizon series are aligned on weeks with a
+    measured PRIMARY window, so cross-horizon comparisons read the same
+    weeks (register row 9(g)).
+
+    Cohort mechanics per register row 3: 4-week overlapping Jegadeesh-Titman
+    cohorts; ranked constructions (S1c, S2) re-enter a maturing name without
+    a round trip while it sits inside twice the entry threshold; event
+    buckets (S1a, S1b, S3) re-enter only on a fresh qualifying event. Costs
+    are episode-netted (cohort_cost); the 0/5/10/20 bps sweep is accumulated
+    in the same pass from the same charged names."""
     horizons = horizons or list(R.HORIZONS)
-    series = {s: {h: [] for h in horizons} for s in SCHEMES}
+    net = {s: {h: [] for h in horizons} for s in SCHEMES}
     gross = {s: {h: [] for h in horizons} for s in SCHEMES}
-    weeks, universe_resid, picks_hist = [], [], {s: set() for s in SCHEMES}
+    net_sweep = {b: {s: [] for s in SCHEMES} for b in COST_SWEEP_BPS}
     turnover = {s: [] for s in SCHEMES}
+    weeks, universe_resid, week_data = [], [], []
+    hist = {s: deque(maxlen=COHORT_WEEKS) for s in SCHEMES}
 
     for prev, curr in zip(merges, merges[1:]):
         sel = select(prev, curr)
@@ -452,74 +597,93 @@ def run_panel(merges: list[dict], get_series, market: pd.Series, sessions,
             continue
         anchor = dt.date.fromisoformat(frame["anchor"].iloc[0]) if frame["anchor"].iloc[0] \
             else dt.date.fromisoformat(curr["as_of"])
-        week_rows = {}
-        for h in horizons:
-            week_rows[h] = measure_week(frame, anchor, h, get_series, market,
-                                        sessions, data_asof)
-        base = week_rows[PRIMARY] if PRIMARY in week_rows else next(iter(week_rows.values()))
-        if base.empty:
+        risk = risk_frame(frame, anchor, get_series, market)
+        if risk.empty:
             continue
-        # S2 needs the realised betas from the measurement frame, so it is built here
-        picks = dict(sel["picks"])
-        picks["S2"] = build_s2(frame.loc[base.index.intersection(frame.index)],
-                               base["beta"])
+        wr = {h: measure_week(frame, risk, anchor, h, get_series, market,
+                              sessions, data_asof, delisted_known) for h in horizons}
+        base = wr.get(PRIMARY, pd.DataFrame())
+        base_ok = not base.empty
+
+        s2_entry, s2_band = build_s2(frame.loc[frame.index.intersection(risk.index)],
+                                     risk["beta"])
+        entries = dict(sel["picks"])
+        entries["S2"] = s2_entry
+        bands = {"S1c": sel.get("bands", {}).get("S1c", set()), "S2": s2_band}
+
         weeks.append(curr["as_of"])
-        universe_resid.append(float(base["neutral"].mean()))
-
+        universe_resid.append(float(base["neutral"].mean()) if base_ok else float("nan"))
+        cohorts = {}
         for s in SCHEMES:
-            p = picks[s] & set(base.index)
-            prev_p = picks_hist[s]
-            cost = cohort_cost(p, frame, prev_p, flat_bps)
-            new = len(p - prev_p)
-            turnover[s].append(new / len(p) if p else float("nan"))
+            matured = hist[s][0] if len(hist[s]) == COHORT_WEEKS else set()
+            held = set().union(*hist[s]) if hist[s] else set()
+            cohort = set(entries.get(s) or set())
+            if s in bands:
+                cohort |= (matured & bands[s])      # band re-entry, no round trip
+            cohorts[s] = cohort
+            cost, charged = cohort_cost(cohort, frame, held)
+            turnover[s].append(len(charged) / len(cohort) if cohort else float("nan"))
             for h in horizons:
-                wr = week_rows[h]
-                q = p & set(wr.index)
-                g = float(wr.loc[list(q), "neutral"].mean()) if q else float("nan")
+                w = wr[h]
+                q = (cohort & set(w.index)) if (base_ok and not w.empty) else set()
+                g = float(w.loc[list(q), "neutral"].mean()) if q else float("nan")
                 gross[s][h].append(g)
-                series[s][h].append(g - cost if q else float("nan"))
-            picks_hist[s] = p
+                net[s][h].append(g - cost if q else float("nan"))
+            qp = (cohort & set(base.index)) if base_ok else set()
+            gp = float(base.loc[list(qp), "neutral"].mean()) if qp else float("nan")
+            for b in COST_SWEEP_BPS:
+                cb, _ = cohort_cost(cohort, frame, held, flat_bps=b)
+                net_sweep[b][s].append(gp - cb if qp else float("nan"))
+            hist[s].append(cohort)
+        week_data.append({"asof": curr["as_of"], "anchor": anchor.isoformat(),
+                          "wr": wr, "cohorts": cohorts})
 
-    return {"weeks": weeks, "net": series, "gross": gross,
-            "turnover": turnover, "universe_resid": universe_resid}
+    return {"weeks": weeks, "net": net, "gross": gross, "net_sweep": net_sweep,
+            "turnover": turnover, "universe_resid": universe_resid,
+            "week_data": week_data}
 
 
-def null_pvalue(merges: list[dict], panel: dict, scheme: str, horizon: str,
-                get_series, market, sessions, data_asof, draws=NULL_DRAWS,
-                rng=None) -> float | None:
-    """Drift-matched random-entry null (register row 8(b)).
+def _mean_or(x, default=None):
+    """Mean over the non-NaN entries, or `default` when none exist. Avoids
+    numpy's all-NaN slice warning on the accruing panel's unmatured weeks."""
+    x = np.asarray(x, dtype=float)
+    x = x[~np.isnan(x)]
+    return float(x.mean()) if x.size else default
 
-    Each pick is replaced by a random liquid name from the SAME weekly decile of
-    trailing idiosyncratic drift, preserving cohort size and week. This is the leg
-    the BH-FDR applies to: it asks whether the scheme beats a portfolio that shares
-    its drift exposure but carries none of its information."""
-    obs = np.nanmean(panel["net"][scheme][horizon])
-    if math.isnan(obs):
+
+def null_pvalue(panel: dict, scheme: str, horizon: str,
+                draws: int = NULL_DRAWS, rng=None) -> float | None:
+    """Drift-matched random-entry null (register rows 8(b) and 9(i)).
+
+    Each realised cohort name is replaced by a random liquid name from the
+    SAME weekly decile of trailing idiosyncratic drift, preserving cohort
+    size and week. This is the leg the BH-FDR applies to: it asks whether the
+    scheme beats a portfolio that shares its drift exposure but carries none
+    of its information. An unmatched draw would test against a portfolio with
+    the universe's average drift -- a weaker null that would flatter any
+    scheme that happens to select high-drift names.
+
+    The null consumes the cohorts the panel actually measured (including
+    band re-entries) rather than re-running selection -- the prior code
+    re-selected and never built S2's picks, leaving S2's null p-value
+    silently at 1.0. The null portfolio is UNCOSTED while the observed
+    statistic is net of the scheme's costs: the stricter comparison."""
+    obs = _mean_or(panel["net"][scheme][horizon])
+    if obs is None:
         return None
     rng = rng or np.random.default_rng(20260811)
-    # Rebuild per-week residual/drift frames once, then resample cheaply.
     cells = []
-    for prev, curr in zip(merges, merges[1:]):
-        sel = select(prev, curr)
-        frame = sel["frame"]
-        if frame.empty:
+    for wd in panel["week_data"]:
+        w = wd["wr"].get(horizon, pd.DataFrame())
+        base = wd["wr"].get(PRIMARY, pd.DataFrame())
+        if w.empty or base.empty or len(w) < 20:   # too thin to match on deciles
             continue
-        anchor = dt.date.fromisoformat(frame["anchor"].iloc[0]) if frame["anchor"].iloc[0] \
-            else dt.date.fromisoformat(curr["as_of"])
-        wr = measure_week(frame, anchor, horizon, get_series, market, sessions, data_asof)
-        if wr.empty:
-            continue
-        picks = sel["picks"].get(scheme, set()) & set(wr.index)
+        picks = wd["cohorts"].get(scheme, set()) & set(w.index)
         if not picks:
             continue
-        # Register row 8(b): match on the DECILE of trailing idiosyncratic drift,
-        # within the formation week. The replacement cohort must therefore have the
-        # same decile composition as the real one -- an unmatched draw would test
-        # against a portfolio with the universe's average drift, which is a weaker
-        # null and would flatter any scheme that happens to select high-drift names.
-        dec = pd.qcut(wr["drift"].rank(method="first"), 10, labels=False)
-        vals = wr["neutral"].to_numpy()
-        want = pd.Series(list(picks)).map(dec).value_counts().to_dict()
+        dec = pd.qcut(w["drift"].rank(method="first"), 10, labels=False)
+        vals = w["neutral"].to_numpy(dtype=float)
+        want = pd.Series(sorted(picks)).map(dec).value_counts().to_dict()
         pools = {d: np.flatnonzero((dec == d).to_numpy()) for d in want}
         cells.append((vals, pools, want))
     if not cells:
@@ -537,7 +701,10 @@ def null_pvalue(merges: list[dict], panel: dict, scheme: str, horizon: str,
             if take:
                 wk.append(np.nanmean(vals[np.concatenate(take)]))
         means[i] = np.nanmean(wk) if wk else np.nan
-    return float((means >= obs).mean())
+    good = means[~np.isnan(means)]
+    if good.size == 0:
+        return None
+    return float((good >= obs).mean())
 
 
 # --------------------------------------------------------------------------
@@ -589,6 +756,9 @@ def selftest() -> int:
     check("tie classes kept whole -- never splits a score class",
           len(sel) == 105 and all(s[t] >= 8 for t in sel), f"{len(sel)} names, classes 10/9/8")
     check("stops at the first class reaching the floor", 7 not in {s[t] for t in sel})
+    band = top_decile_by_class(s, min_names=180)
+    check("retention band is the 2x floor and contains the entry set (row 3)",
+          sel <= band and len(band) == 205, f"{len(band)} names")
 
     print("\nwinsorisation and z-scores (S2)")
     x = pd.Series([-1000.0] + [0.0] * 98 + [1000.0])
@@ -685,6 +855,14 @@ def selftest() -> int:
     check("a confirmed upgrade selects", "UP" in sel2["S1a"])
     check("a downgrade never selects -- the menu is long-only", "DN" not in sel2["S1a"])
     check("an upgrade with a stale rating date is not confirmed", "OLD" not in sel2["S1a"])
+    curr["records"].append({"ticker": "NEW", "liquid": True, "analyst_consensus": "Hold",
+                            "smart_score": 10, "market_cap": 1e10, "sector": "Tech"})
+    sel3 = select(prev, curr)
+    check("an unpaired name joins the universe frame with no-event defaults (row 3/8(e))",
+          "NEW" in sel3["frame"].index and "NEW" not in sel3["picks"]["S1a"]
+          and "NEW" not in sel3["picks"]["S1b"])
+    check("the S1c retention band is exposed and contains the entry bucket",
+          "S1c" in sel3["bands"] and sel3["picks"]["S1c"] <= sel3["bands"]["S1c"])
 
     print("\nEND-TO-END on synthetic paths with a KNOWN answer")
     # Build a market and 200 names with known betas and known idiosyncratic drift.
@@ -717,8 +895,9 @@ def selftest() -> int:
     frame = pd.DataFrame(names).set_index("ticker")
     sessions = [d.date() for d in idx]
     data_asof = idx[-1].date()
-    wr = measure_week(frame, anchor, "1m", lambda sym: series.get(sym), mkt,
-                      sessions, data_asof)
+    get = lambda sym: series.get(sym)          # noqa: E731
+    risk = risk_frame(frame, anchor, get, mkt)
+    wr = measure_week(frame, risk, anchor, "1m", get, mkt, sessions, data_asof)
     check("every name measured -- no silent drops", len(wr) == 200, f"{len(wr)} of 200")
     check("trailing beta recovered from the path",
           abs((wr["beta"] - frame.loc[wr.index, "beta_true"]).abs().mean()) < 0.02,
@@ -741,6 +920,25 @@ def selftest() -> int:
     hb = wr.loc[wr.index[wr["beta"] > wr["beta"].median()], "neutral"]
     check("a pure high-beta selection earns no alpha -- guard 2 of the memo holds",
           abs(hb.mean()) < 0.005, f"{hb.mean():.4f} on {len(hb)} names")
+
+    print("\ndelisted window: every adjustment component covers the lived sessions (row 9(h))")
+    # A name that IS the market, truncated eleven sessions after the anchor:
+    # raw, beta leg and drift leg then cover the same part-window, so its
+    # adjusted alpha is exactly zero. Under a full-horizon market leg it would
+    # instead carry the market's post-delisting move with the sign flipped.
+    dl = mkt.iloc[:311].copy()
+    dlf = pd.DataFrame([{"ticker": "DLST", "symbol": "DLST", "market_cap": 1e10,
+                         "dividend_yield": 1.0, "sector": "Tech", "adv_usd": 500e6,
+                         "anchor": anchor.isoformat()}]).set_index("ticker")
+    ser2 = {"DLST": dl}
+    risk2 = risk_frame(dlf, anchor, lambda sym: ser2.get(sym), mkt)
+    wr2 = measure_week(dlf, risk2, anchor, "1m", lambda sym: ser2.get(sym), mkt,
+                       sessions, data_asof)
+    check("a name stopping mid-window while the feed runs on is flagged delisted",
+          len(wr2) == 1 and bool(wr2.at["DLST", "delisted"]))
+    check("a market-mirroring delisted name earns exactly zero adjusted alpha",
+          abs(float(wr2.at["DLST", "adj"])) < 1e-12,
+          f"{float(wr2.at['DLST', 'adj']):.2e}")
 
     print("\ndrift-matched null (register row 8(b))")
     # A null that ignores drift is a weaker null. Build a universe where high-drift
@@ -770,15 +968,23 @@ def selftest() -> int:
     check("an UNMATCHED null would have called the same pick a discovery",
           p_unmatched < 0.01, f"p = {p_unmatched:.3f} -- this is what 8(b) prevents")
 
-    print("\ncost accounting")
+    print("\ncost accounting (episode netting, register row 9(f))")
     f2 = pd.DataFrame({"adv_usd": [500e6, 500e6, 15e6]}, index=["A", "B", "C"])
-    c_all_new = cohort_cost({"A", "B"}, f2, set())
-    check("a fresh cohort pays a full round trip", abs(c_all_new - 0.0006) < 1e-12)
-    c_retained = cohort_cost({"A", "B"}, f2, {"A", "B"})
-    check("a fully retained cohort pays nothing at the roll", c_retained == 0.0)
-    c_mixed = cohort_cost({"A", "C"}, f2, {"A"})
+    c_all_new, ch = cohort_cost({"A", "B"}, f2, set())
+    check("a fresh cohort pays a full round trip",
+          abs(c_all_new - 0.0006) < 1e-12 and ch == {"A", "B"})
+    c_retained, ch = cohort_cost({"A", "B"}, f2, {"A", "B"})
+    check("a fully retained cohort pays nothing at the roll",
+          c_retained == 0.0 and not ch)
+    c_mixed, ch = cohort_cost({"A", "C"}, f2, {"A"})
     check("only the new name pays, and at its own tier",
-          abs(c_mixed - (2 * 15 / 10_000) / 2) < 1e-12, f"{c_mixed:.6f}")
+          abs(c_mixed - (2 * 15 / 10_000) / 2) < 1e-12 and ch == {"C"}, f"{c_mixed:.6f}")
+    c_older, ch = cohort_cost({"A"}, f2, {"A", "B", "C"})
+    check("a name held via ANY live cohort pays nothing -- episode, not week-on-week",
+          c_older == 0.0 and not ch)
+    c_flat, _ = cohort_cost({"A", "B"}, f2, set(), flat_bps=20.0)
+    check("flat sweep overrides the tier in the same accounting",
+          abs(c_flat - 0.004) < 1e-12, f"{c_flat:.4f}")
 
     print(f"\n[analyse] selftest {'OK' if ok else 'FAILED'}")
     return 0 if ok else 1
@@ -800,9 +1006,10 @@ def main() -> int:
     if a.selftest:
         return selftest()
     if a.register:
-        print("[analyse] implementation choices NOT fixed by RESEARCH_MEMO.md:")
-        print(REGISTER_CANDIDATES)
-        print("[analyse] Register these before any read is taken (row-6 precedent).")
+        print("[analyse] implementation choices in force -- register row 8 (2026-08-08):")
+        print(REGISTER_ROW8)
+        print("[analyse] and register row 9 (2026-08-13, pre-flight):")
+        print(REGISTER_ROW9)
         return 0
 
     merges = load_merges()
@@ -819,8 +1026,9 @@ def main() -> int:
               "pre-registration is exactly that it binds when the data is tempting.")
         return 1
 
-    print("[analyse] gate open. Implementation choices in force (register row 8):")
-    print(REGISTER_CANDIDATES)
+    print("[analyse] gate open. Implementation choices in force (register rows 8 and 9):")
+    print(REGISTER_ROW8)
+    print(REGISTER_ROW9)
 
     import exchange_calendars as xcals
     import norgate as ng
@@ -833,46 +1041,89 @@ def main() -> int:
     sessions = [d.date() for d in cal.sessions_in_range(
         pd.Timestamp(first), pd.Timestamp(data_asof))]
 
-    cache: dict = {}
+    # --- symbol resolution, delisting-aware (register row 9(k)) -------------
+    # Every panel symbol resolved at capture, so a live-feed miss here means
+    # the name has since delisted (the plain symbol moves to the delisted
+    # database, EA-202608 style) or, later, been reassigned. Silently
+    # dropping such a name is the survivorship gap guard 1 exists to prevent.
+    earliest: dict[str, tuple[str, dt.date]] = {}
+    for m in merges:
+        for r in m["records"]:
+            if not r.get("liquid"):
+                continue
+            t = r["ticker"]
+            sym = r.get("norgate_symbol") or t
+            d = dt.date.fromisoformat(r.get("anchor_date") or m["as_of"])
+            if t not in earliest or d < earliest[t][1]:
+                earliest[t] = (sym, d)
+    cache, delisted_known, unresolved = {}, {}, []
+    for t, (sym, d0) in sorted(earliest.items()):
+        try:
+            s = R.stock_series(sym, n)
+        except Exception:                          # noqa: BLE001 -- feed quirk
+            s = None
+        if s is None or s.loc[:pd.Timestamp(d0)].empty:
+            dsym = ng.delisted_symbol_for(n, t, d0)
+            if dsym is not None:
+                ds = R.stock_series(dsym, n)
+                if ds is not None:
+                    s = ds
+                    delisted_known[t] = True
+        if s is None:
+            unresolved.append(t)
+        cache[sym] = s
+    if delisted_known:
+        print(f"[analyse] {len(delisted_known)} name(s) resolved through the delisted "
+              f"database: {', '.join(sorted(delisted_known))}")
+    if unresolved:
+        print(f"[analyse] WARNING: {len(unresolved)} liquid name(s) resolve on neither "
+              f"the live nor the delisted feed and DROP from measurement: "
+              f"{', '.join(unresolved)}")
+        print("[analyse] Every dropped name is a survivorship hole. Investigate "
+              "(norgate.py --probe, delisted database) before trusting this read.")
 
     def get_series(sym: str):
-        if sym not in cache:
-            try:
-                cache[sym] = R.stock_series(sym, n)
-            except Exception:                      # a name the live feed cannot resolve
-                cache[sym] = None
-        return cache[sym]
+        return cache.get(sym)
 
     print(f"[analyse] measuring {len(merges) - 1} formation weeks against a feed "
           f"through {data_asof}...")
-    panel = run_panel(merges, get_series, market, sessions, data_asof)
-    print(f"[analyse] {len(panel['weeks'])} cohort weeks measured; "
-          f"universe residual mean {np.nanmean(panel['universe_resid']):.2e} "
-          f"(must be ~0 -- the EW universe is the embedded benchmark)")
+    panel = run_panel(merges, get_series, market, sessions, data_asof,
+                      delisted_known=delisted_known)
+    n_measured = sum(1 for v in panel["universe_resid"] if not math.isnan(v))
+    print(f"[analyse] {len(panel['weeks'])} formation weeks, {n_measured} with a "
+          f"measured {PRIMARY} window; universe residual mean "
+          f"{_mean_or(panel['universe_resid'], float('nan')):.2e} "
+          "(must be ~0 -- the EW universe is the embedded benchmark)")
 
     verdict_ok = (state["captures"] >= VERDICT_CAPTURES
                   and state["matured"] >= VERDICT_COHORTS)
     pvals, out = {}, {}
     for s in SCHEMES:
-        net = np.array(panel["net"][s][PRIMARY], dtype=float)
-        pt = float(np.nanmean(net)) if net.size else float("nan")
+        net = np.asarray(panel["net"][s][PRIMARY], dtype=float)
+        xs = net[~np.isnan(net)]
+        pt = float(xs.mean()) if xs.size else float("nan")
         lo, hi, nobs = block_bootstrap_ci(net)
-        p = null_pvalue(merges, panel, s, PRIMARY, get_series, market,
-                        sessions, data_asof)
+        p = null_pvalue(panel, s, PRIMARY)
         pvals[s] = 1.0 if p is None else p
-        signs = {h: float(np.nanmean(panel["net"][s][h])) for h in R.HORIZONS}
+        signs = {h: _mean_or(panel["net"][s][h], float("nan")) for h in R.HORIZONS}
         sign_stable = (not math.isnan(pt) and pt != 0
                        and all(np.sign(v) == np.sign(pt) for v in signs.values()
                                if not math.isnan(v)))
-        sd = float(np.nanstd(net, ddof=1)) if net.size > 1 else float("nan")
+        sd = float(xs.std(ddof=1)) if xs.size > 1 else float("nan")
         sr = pt / sd if sd and not math.isnan(sd) and sd > 0 else None
+        sk, ku = realised_moments(net)
+        sweep = {f"{b:g}": _mean_or(panel["net_sweep"][b][s]) for b in COST_SWEEP_BPS}
         out[s] = {"alpha_1m": pt, "ci95": [lo, hi], "n_cohorts": nobs,
                   "null_p": p, "sign_stable": sign_stable,
                   "by_horizon": signs, "sharpe": sr,
-                  "dsr": deflated_sharpe(sr, nobs or 0, len(SCHEMES)) if sr else None,
-                  "turnover": float(np.nanmean(panel["turnover"][s]))}
+                  "skew": sk, "kurtosis": ku,
+                  "dsr": (deflated_sharpe(sr, nobs or 0, len(SCHEMES), skew=sk, kurt=ku)
+                          if sr is not None else None),
+                  "cost_sweep_alpha_1m": sweep,
+                  "turnover": _mean_or(panel["turnover"][s], float("nan"))}
 
     fdr = bh_fdr(pvals)
+    n_eff = effective_n(panel["net"], PRIMARY)
     print(f"\n{'scheme':<7}{'alpha 1m':>10}{'95% CI':>22}{'null p':>9}"
           f"{'FDR':>6}{'sign':>6}{'turn':>7}")
     for s in SCHEMES:
@@ -888,11 +1139,27 @@ def main() -> int:
               f"{('yes' if o['sign_stable'] else 'no'):>6}"
               f"{o['turnover']:>7.2f}")
 
+    # Memo, Measurement: report the flat 0/5/10/20 bps sweep alongside the
+    # tiered headline. No friction-free headline -- the 0 bps column is the
+    # sweep's lower bound, never the number that leads.
+    hdr = "".join(f"{'net@' + f'{b:g}' + 'bp':>12}" for b in COST_SWEEP_BPS)
+    print(f"\n{'scheme':<7}{hdr}   (flat sweep, 1m)")
+    for s in SCHEMES:
+        cells = "".join(
+            f"{v:>+12.4f}" if v is not None else f"{'n/a':>12}"
+            for v in (out[s]["cost_sweep_alpha_1m"][f"{b:g}"] for b in COST_SWEEP_BPS))
+        print(f"{s:<7}{cells}")
+    print("[analyse] N_eff (realised net-return correlations, context; DSR is at "
+          f"nominal N = {len(SCHEMES)}) = " + (f"{n_eff:.2f}" if n_eff else "n/a"))
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = dt.date.today().isoformat()
     payload = {"generated": stamp, "captures": state["captures"],
                "matured_cohorts": state["matured"], "verdict_eligible": verdict_ok,
-               "register_row": 8, "schemes": out, "weeks": panel["weeks"]}
+               "register_rows": [8, 9], "n_eff": n_eff,
+               "delisted_resolved": sorted(delisted_known),
+               "unresolved_dropped": unresolved,
+               "schemes": out, "weeks": panel["weeks"]}
     (OUT_DIR / f"analysis_{stamp}.json").write_text(
         json.dumps(payload, indent=2, default=float), encoding="utf-8")
 

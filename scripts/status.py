@@ -17,7 +17,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SNAP_DIR = ROOT / "data" / "snapshots"
 MERGE_DIR = ROOT / "data" / "merged"
-MIN_SNAPSHOTS = 8          # keep in step with analyse.py
+MIN_SNAPSHOTS = 8          # keep in step with analyse.py: interim read unlocks here
+VERDICT_CAPTURES = 26      # keep in step with analyse.py: verdict eligibility
+VERDICT_COHORTS = 20       # keep in step with analyse.py: matured 1m cohorts for a verdict
 MATURE_DAYS = 31           # ~1 calendar month -> the primary (1m) forward window has closed
 
 
@@ -62,12 +64,17 @@ def main() -> int:
     need = max(0, MIN_SNAPSHOTS - len(snaps))
     print("-" * 44)
     print(f"toward first analysis        : [{bar}] {len(snaps)}/{MIN_SNAPSHOTS} captures")
+    # Register row 5: the interim read unlocks at 8 CAPTURES and carries no
+    # verdict; maturity gates the VERDICT (>= 26 captures AND >= 20 matured 1m
+    # cohorts), not the interim unlock. The two bars are different dates.
     if need:
-        print(f"analyse.py runnable in ~{need} more weekly capture(s), once "
-              f"{MIN_SNAPSHOTS} have a matured 1m window.")
+        print(f"interim read unlocks in ~{need} more weekly capture(s): analyse.py "
+              f"--force-interim runs at {MIN_SNAPSHOTS} captures and carries NO verdict.")
     else:
-        print(f"threshold met ({len(snaps)} captures, {matured} with a matured 1m window) "
-              "-- analyse.py can implement the pre-registered read.")
+        print(f"interim bar met ({len(snaps)} captures, {matured} with a matured 1m "
+              "window) -- analyse.py --force-interim gives a NO-VERDICT interim read.")
+    print(f"verdicts need >= {VERDICT_CAPTURES} captures AND >= {VERDICT_COHORTS} "
+          "matured 1m cohorts (register row 5).")
     return 0
 
 

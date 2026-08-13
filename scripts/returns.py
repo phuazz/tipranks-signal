@@ -228,6 +228,20 @@ def sessions_between(entry: dt.date, exit_: dt.date, sessions) -> int:
     return len([s for s in sessions if entry < s <= exit_])
 
 
+def market_return_between(market_closes: pd.Series, entry: dt.date, exit_: dt.date) -> float | None:
+    """Market TOTALRETURN over an explicit [entry, exit] bar range.
+
+    Used for the beta leg of a DELISTED window: every removed component must
+    cover the same lived sessions as the name's own return -- the drift leg is
+    already prorated per session, and subtracting a full-horizon market move
+    from a part-window stock return would mix two windows in one number."""
+    m = _closes(market_closes)
+    w = m.loc[pd.Timestamp(entry):pd.Timestamp(exit_)]
+    if len(w) < 2:
+        return None            # a one-bar window has no market move to strip
+    return float(w.iloc[-1]) / float(w.iloc[0]) - 1.0
+
+
 # --- Norgate wrappers (thin; everything above is testable without them) ----
 
 def _norgate():
@@ -381,6 +395,16 @@ def selftest() -> int:
     a_part = drift_adjust(0.05, 0.02, 1.0, 0.001, 9)
     check("delisted window removes less drift than a full one", a_part > a_full,
           f"{a_part:.4f} > {a_full:.4f}")
+
+    print("[returns] market leg over a delisted (part) window")
+    mkt2 = _synthetic("2026-01-02", 200, 0.001)
+    mr_full = market_return_between(mkt2, dt.date(2026, 2, 2), dt.date(2026, 3, 2))
+    mr_part = market_return_between(mkt2, dt.date(2026, 2, 2), dt.date(2026, 2, 12))
+    check("part-window market move is smaller than the full-window one",
+          mr_part is not None and mr_full is not None and 0 < mr_part < mr_full,
+          f"{mr_part:.4f} < {mr_full:.4f}")
+    check("a degenerate one-bar window refuses rather than returning zero",
+          market_return_between(mkt2, dt.date(2026, 2, 2), dt.date(2026, 2, 2)) is None)
 
     print(f"\n[returns] {'ALL CHECKS PASSED' if not fails else str(len(fails)) + ' FAILED: ' + ', '.join(fails)}")
     return 1 if fails else 0

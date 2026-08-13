@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt   # Python datetime: months are 1-indexed (Jan == 1)
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -290,6 +291,41 @@ def resolve_symbol(n, ticker: str) -> str | None:
         seen.append(c)
         if _last_bar_date(n, c) is not None:
             return c
+    return None
+
+
+_DELISTED_SYMBOLS: list[str] | None = None
+
+
+def delisted_symbol_for(n, ticker: str, must_cover: dt.date) -> str | None:
+    """Ticker -> suffixed symbol in 'US Equities Delisted' (EA-202608 style)
+    whose bars SPAN `must_cover`.
+
+    A plain symbol vanishes from the live database at delisting and can later be
+    reassigned to a different company, so a name that resolved at capture but not
+    at analyse time must be looked up in the suffixed delisted namespace. The
+    span check is what rejects an older namesake that delisted years earlier:
+    the panel held the name on `must_cover`, so the right candidate was trading
+    then, and two companies cannot hold one ticker at the same instant."""
+    global _DELISTED_SYMBOLS
+    if _DELISTED_SYMBOLS is None:
+        _DELISTED_SYMBOLS = [str(s) for s in n.database_symbols("US Equities Delisted")]
+    stems = []
+    for c in (ticker, ticker.replace(".", "-"), ticker.replace("-", "."),
+              ticker.replace(".", " "), ticker.replace("/", ".")):
+        c = c.strip().upper()
+        if c and c not in stems:
+            stems.append(c)
+    pat = re.compile("^(" + "|".join(re.escape(s) for s in stems) + r")-\d{6}$")
+    for sym in _DELISTED_SYMBOLS:
+        if not pat.match(sym.upper()):
+            continue
+        df = _price(n, sym, "TOTALRETURN")
+        if len(df) == 0:
+            continue
+        first, last = df.index[0].date(), df.index[-1].date()
+        if first <= must_cover <= last:
+            return sym
     return None
 
 
