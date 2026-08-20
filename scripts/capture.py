@@ -32,6 +32,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+SGT = ZoneInfo("Asia/Singapore")   # capture stamps are Singapore wall-clock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -191,13 +194,60 @@ def validate(csv_path: Path, asof: dt.date, force: bool,
     return checks, fatal
 
 
-def _anchor_session(d: dt.date, sessions: list[dt.date]):
-    """The US session a Singapore-day capture reflects: the last XNYS session on
-    or before the previous calendar day, because a US close lands at about
-    04:00 SGT the following morning. Calendar library only -- never hand-rolled."""
+def _session_bounds(cal, sessions: list[dt.date]) -> dict:
+    """{session date: (open, close)} in SGT, read off the exchange calendar.
+
+    Derived, never hard-coded. The US open lands at 21:30 SGT under EDT but
+    22:30 under EST, and the close moves with it -- 04:00 SGT the next morning
+    in summer, 05:00 in winter, 02:00 after a 13:00 ET early close. A fixed
+    clock constant is right for about eight months of the year and silently
+    wrong for the rest, which is the failure mode this study cannot see.
+    """
+    def sgt(ts):
+        ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts
+        return ts.tz_convert(SGT).to_pydatetime()
+
+    return {s: (sgt(cal.session_open(s)), sgt(cal.session_close(s))) for s in sessions}
+
+
+def _capture_instant(d: dt.date, hhmm: str | None):
+    """SGT instant of a capture, or None when the entry carries no time.
+    Python months are 1-indexed; the date is taken from the parsed key, never
+    re-derived."""
+    if not hhmm:
+        return None
+    return dt.datetime(d.year, d.month, d.day, int(hhmm[:2]), int(hhmm[2:]), tzinfo=SGT)
+
+
+def _anchor_session(d: dt.date, sessions: list[dt.date], hhmm: str | None = None,
+                    bounds: dict | None = None):
+    """The US session a capture reflects: the last one that had CLOSED at the
+    capture instant, judged against that session's own close.
+
+    An untimed entry falls back to the calendar-day rule -- the last session on
+    or before the previous Singapore day -- which is the best available reading
+    when the clock time was never recorded.
+    """
+    inst = _capture_instant(d, hhmm)
+    if inst is not None and bounds:
+        closed = [s for s in sessions if bounds[s][1] <= inst]
+        return closed[-1] if closed else None
     cutoff = d - dt.timedelta(days=1)
     prior = [s for s in sessions if s <= cutoff]
     return prior[-1] if prior else None
+
+
+def _slot(d: dt.date, hhmm: str | None, sessions: list[dt.date], bounds: dict):
+    """Which trialled slot a capture belongs to, by the US session date rather
+    than a Singapore clock reading: "intraday" when a US session was live at the
+    capture instant, "post-close" when the last session had already closed.
+    None for an untimed entry -- the slot is not inferable without a time.
+    """
+    inst = _capture_instant(d, hhmm)
+    if inst is None:
+        return None
+    live = any(o <= inst < c for o, c in (bounds[s] for s in sessions))
+    return "intraday" if live else "post-close"
 
 
 def daily_coverage() -> None:
@@ -216,21 +266,25 @@ def daily_coverage() -> None:
     lo = (dates[0] - dt.timedelta(days=10)).isoformat()
     hi = dates[-1].isoformat()
     sessions = [s.date() for s in cal.sessions_in_range(lo, hi)]
-    covered = sorted({a for a in (_anchor_session(d, sessions) for d in dates) if a})
+    bounds = _session_bounds(cal, sessions)
+    covered = sorted({a for a in (_anchor_session(d, sessions, hhmm, bounds)
+                                  for d, hhmm in keys) if a})
     if not covered:
         return
     in_range = [s for s in sessions if covered[0] <= s <= covered[-1]]
     missed = [s for s in in_range if s not in set(covered)]
-    # Slot split: a capture taken before the US open (about 21:30 SGT) sees a
-    # completed session; a later one straddles the live US session and catches
-    # intraday flow early. Both are being trialled -- report the mix.
-    timed = [k for k in keys if k[1]]
-    pre = sum(1 for k in timed if k[1] < "2130")
+    # Slot split: a post-close capture sees one completed US session; an
+    # intraday one straddles the live session and catches flow early. Both are
+    # being trialled -- report the mix. Classified by the session's own
+    # open/close, so the split holds across DST and early closes.
+    slots = [_slot(d, hhmm, sessions, bounds) for d, hhmm in keys]
+    timed = [s for s in slots if s]
+    pre = sum(1 for s in timed if s == "post-close")
     print(f"\n[daily] event log: {len(keys)} capture(s), "
           f"{dates[0].isoformat()} -> {dates[-1].isoformat()} (Singapore capture dates)")
     if timed:
-        print(f"[daily] slots: {pre} post-close (before 21:30 SGT) / "
-              f"{len(timed) - pre} intraday (after the US open); {len(keys) - len(timed)} untimed")
+        print(f"[daily] slots: {pre} post-close (no US session live) / "
+              f"{len(timed) - pre} intraday (US session live); {len(keys) - len(timed)} untimed")
     print(f"[daily] US sessions covered: {len(covered)} of {len(in_range)} in range "
           f"({len(covered) / len(in_range):.0%}); latest anchor {covered[-1].isoformat()}")
     print("[daily] uncovered sessions: "
@@ -258,9 +312,81 @@ def latest_export():
     return cands[0] if cands else None
 
 
+def selftest() -> int:
+    """Slot and anchor rules against known sessions. These are the cases a
+    Singapore clock reading gets wrong, so they are asserted rather than
+    eyeballed: the DST flip, the post-midnight window while New York is still
+    open, an early close, and the month and year boundaries the vault rule
+    requires of any date logic."""
+    import exchange_calendars as xcals
+    cal = xcals.get_calendar("XNYS")
+    sessions = [s.date() for s in cal.sessions_in_range("2026-06-01", "2027-02-01")]
+    bounds = _session_bounds(cal, sessions)
+
+    # (label, Singapore capture date, HHMM, expected slot, expected anchor)
+    # Python months are 1-indexed.
+    cases = [
+        ("EDT morning, last session closed 04:00 SGT",
+         dt.date(2026, 8, 20), "0738", "post-close", dt.date(2026, 8, 19)),
+        ("EDT, minutes before the 21:30 SGT open",
+         dt.date(2026, 8, 20), "2125", "post-close", dt.date(2026, 8, 19)),
+        ("EDT, minutes after the open",
+         dt.date(2026, 8, 20), "2135", "intraday", dt.date(2026, 8, 19)),
+        # Past midnight in Singapore, New York still trading. The old clock rule
+        # read this as post-close and anchored to a session that had not closed.
+        ("EDT, past midnight with the session live",
+         dt.date(2026, 8, 21), "0230", "intraday", dt.date(2026, 8, 19)),
+        # Under EST the open moves to 22:30 SGT, so 22:00 is no longer intraday.
+        ("EST, before the 22:30 SGT open",
+         dt.date(2026, 12, 9), "2200", "post-close", dt.date(2026, 12, 8)),
+        ("EST, after the open",
+         dt.date(2026, 12, 9), "2240", "intraday", dt.date(2026, 12, 8)),
+        ("EST, past midnight with the session live",
+         dt.date(2026, 12, 10), "0430", "intraday", dt.date(2026, 12, 8)),
+        # Thanksgiving Friday closes 13:00 ET = 02:00 SGT, three hours early.
+        ("early close, already shut at 03:30 SGT",
+         dt.date(2026, 11, 28), "0330", "post-close", dt.date(2026, 11, 27)),
+        ("early close, still live at 01:30 SGT",
+         dt.date(2026, 11, 28), "0130", "intraday", dt.date(2026, 11, 25)),
+        # Month boundary: the Singapore date rolls into September while the
+        # anchor session stays in August.
+        ("month boundary, 1 Sep capture anchors to 31 Aug",
+         dt.date(2026, 9, 1), "0800", "post-close", dt.date(2026, 8, 31)),
+        # Year boundary: 1 Jan is an XNYS holiday, so the anchor reaches back
+        # across both the year end and the closed session.
+        ("year boundary, 2 Jan capture anchors to 31 Dec",
+         dt.date(2027, 1, 2), "0800", "post-close", dt.date(2026, 12, 31)),
+    ]
+
+    failures = 0
+    for label, d, hhmm, want_slot, want_anchor in cases:
+        got_slot = _slot(d, hhmm, sessions, bounds)
+        got_anchor = _anchor_session(d, sessions, hhmm, bounds)
+        ok = got_slot == want_slot and got_anchor == want_anchor
+        failures += not ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {label}")
+        if not ok:
+            print(f"        want {want_slot}/{want_anchor}, got {got_slot}/{got_anchor}")
+
+    # An untimed entry must still resolve, by the calendar-day fallback.
+    fallback = _anchor_session(dt.date(2026, 8, 20), sessions, None, bounds)
+    ok = fallback == dt.date(2026, 8, 19)
+    failures += not ok
+    print(f"  {'PASS' if ok else 'FAIL'}  untimed entry falls back to the calendar-day rule")
+
+    if failures:
+        print(f"[selftest] {failures} FAILED")
+        return 1
+    print("[selftest] OK -- slot and anchor rules hold across DST, early closes, "
+          "and the month and year boundaries")
+    return 0
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__)
+    if "--selftest" in sys.argv:
+        return selftest()
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", help="path to the screener export CSV")
     src.add_argument("--latest", action="store_true",
@@ -273,6 +399,8 @@ def main() -> int:
     ap.add_argument("--daily", action="store_true",
                     help="file into the daily event log (data/daily/): validate and ingest only, "
                          "no merge / dashboard / publish. The frozen weekly panel is untouched.")
+    ap.add_argument("--selftest", action="store_true",
+                    help="check the slot and anchor date rules and stop (touches nothing)")
     a = ap.parse_args()
 
     if a.latest:
