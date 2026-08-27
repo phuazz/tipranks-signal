@@ -266,6 +266,23 @@ def main() -> int:
     (OUT_HTML.parent / ".nojekyll").write_text("", encoding="utf-8")
     DEV_JSON.parent.mkdir(parents=True, exist_ok=True)
     DEV_JSON.write_text(out_json, encoding="utf-8")
+
+    # STATE_CONTRACT emission for the private command centre — the accrual state
+    # only, in the shape it reads. Runs here because it copies from the
+    # aggregates file just written. Non-fatal by construction: emit() never
+    # raises and the import is inside the try, because this pipeline's leak
+    # guard and its published output are the product, and a convenience for one
+    # private reader must never be able to fail them.
+    #
+    # The emitter enforces its own half of the firewall: it refuses to write
+    # unless git confirms the output path is gitignored.
+    try:
+        import emit_state
+        if not emit_state.emit(log=lambda m: print(f"[pipeline] {m}")):
+            print("[pipeline] state emission DEGRADED — see the message above")
+    except Exception as exc:  # noqa: BLE001 — never let a convenience block the product
+        print(f"[pipeline] state emission unavailable: {type(exc).__name__}: {exc}")
+
     mon = _build_monitor_shell(all_tickers)
     print(f"[pipeline] {len(weekly)} weekly rows, revision "
           f"{'ON' if latest_pair else 'pending'}; leak guard PASS "
