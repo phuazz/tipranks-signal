@@ -291,6 +291,56 @@ def daily_coverage() -> None:
           + (", ".join(s.isoformat() for s in missed) if missed else "none"))
 
 
+def _due(slot: str, cur_slot: str | None, anchor, covered: set) -> tuple[bool, str]:
+    """Should a slot's reminder fire? Pure, so the rule is testable without a
+    clock or a filesystem.
+
+    The two slots ask different questions, and this is the trap the naive
+    reading falls into. INTRADAY exists to straddle a live US session, so it is
+    due only while one is open -- a US holiday kills it. POST-CLOSE exists to
+    map one completed session to one capture, so it is due whenever the session
+    it would anchor to is not already in the log. Testing "is today a session"
+    for post-close is wrong in both directions: it would fire on the Tuesday
+    after a Monday holiday (anchoring to a Friday already covered) and it would
+    suppress the Saturday capture, which is the one that covers Friday.
+    """
+    if slot == "intraday":
+        if cur_slot == "intraday":
+            return True, "a US session is live"
+        return False, "no US session is live (weekend or US market holiday)"
+    if anchor is None:
+        return False, "no completed US session to anchor to"
+    if anchor in covered:
+        return False, f"the last completed session ({anchor.isoformat()}) is already covered"
+    return True, f"the completed session {anchor.isoformat()} is not yet covered"
+
+
+def daily_due(slot: str) -> None:
+    """Print whether SLOT's reminder is due right now, as DUE or SKIP.
+
+    Reads the same anchor and slot rules the coverage report uses, so a reminder
+    can never disagree with the log about which session a capture would land on.
+    """
+    now = dt.datetime.now(SGT)
+    today, hhmm = now.date(), now.strftime("%H%M")
+    import exchange_calendars as xcals
+    cal = xcals.get_calendar("XNYS")
+    lo = (today - dt.timedelta(days=14)).isoformat()
+    hi = (today + dt.timedelta(days=1)).isoformat()
+    sessions = [s.date() for s in cal.sessions_in_range(lo, hi)]
+    bounds = _session_bounds(cal, sessions)
+
+    keys = sorted(k for k in (_snap_key(p) for p in DAILY_SNAP_DIR.glob("snapshot_*.json"))
+                  if k is not None) if DAILY_SNAP_DIR.exists() else []
+    covered = {a for a in (_anchor_session(d, sessions, hh, bounds) for d, hh in keys) if a}
+
+    cur_slot = _slot(today, hhmm, sessions, bounds)
+    anchor = _anchor_session(today, sessions, hhmm, bounds)
+    due, why = _due(slot, cur_slot, anchor, covered)
+    stamp = now.strftime("%Y-%m-%d (%A) %H:%M SGT")
+    print(f"[due] {slot}: {'DUE' if due else 'SKIP'} -- {why}, at {stamp}")
+
+
 def run(cmd: list[str], label: str) -> None:
     print(f"\n[capture] {label}: {' '.join(str(c) for c in cmd[1:])}")
     res = subprocess.run(cmd, cwd=ROOT)
@@ -374,11 +424,42 @@ def selftest() -> int:
     failures += not ok
     print(f"  {'PASS' if ok else 'FAIL'}  untimed entry falls back to the calendar-day rule")
 
+    # Reminder due-ness. The two traps are asserted rather than reasoned about:
+    # post-close must NOT fire on the Tuesday after a Monday holiday (its anchor
+    # is a Friday already covered), and it must STILL fire on a Saturday, when
+    # the exchange is shut but Friday's session is the one being captured.
+    # Python months are 1-indexed.
+    due_cases = [
+        ("intraday skips a US holiday (Labor Day, 2026-09-07)",
+         "intraday", dt.date(2026, 9, 7), "2215", set(), False),
+        ("intraday fires while a session is live",
+         "intraday", dt.date(2026, 9, 8), "2215", set(), True),
+        ("post-close fires on Saturday for Friday's session",
+         "post-close", dt.date(2026, 9, 5), "0730", set(), True),
+        ("post-close skips when the anchor is already covered",
+         "post-close", dt.date(2026, 9, 5), "0730", {dt.date(2026, 9, 4)}, False),
+        ("post-close skips the Tuesday after a Monday holiday",
+         "post-close", dt.date(2026, 9, 8), "0730", {dt.date(2026, 9, 4)}, False),
+        ("post-close month boundary, 1 Sep anchors to 31 Aug",
+         "post-close", dt.date(2026, 9, 1), "0800", set(), True),
+        ("post-close year boundary, 2 Jan anchors to 31 Dec",
+         "post-close", dt.date(2027, 1, 2), "0800", {dt.date(2026, 12, 30)}, True),
+    ]
+    for label, slot, d, hhmm, covered, want in due_cases:
+        got, why = _due(slot, _slot(d, hhmm, sessions, bounds),
+                        _anchor_session(d, sessions, hhmm, bounds), covered)
+        ok = got == want
+        failures += not ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {label}")
+        if not ok:
+            print(f"        want {'DUE' if want else 'SKIP'}, got "
+                  f"{'DUE' if got else 'SKIP'} -- {why}")
+
     if failures:
         print(f"[selftest] {failures} FAILED")
         return 1
-    print("[selftest] OK -- slot and anchor rules hold across DST, early closes, "
-          "and the month and year boundaries")
+    print("[selftest] OK -- slot, anchor and reminder due-ness rules hold across DST, "
+          "early closes, US holidays, and the month and year boundaries")
     return 0
 
 
@@ -387,6 +468,19 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     if "--selftest" in sys.argv:
         return selftest()
+    # --due answers a reminder's question and needs no export, so it short-circuits
+    # ahead of the required source group, as --selftest does.
+    due_arg = next((v for v in sys.argv if v.startswith("--due")), None)
+    if due_arg is not None:
+        if "=" in due_arg:
+            slot = due_arg.split("=", 1)[1]
+        else:
+            i = sys.argv.index(due_arg)
+            slot = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
+        if slot not in ("intraday", "post-close"):
+            sys.exit(f"[due] --due needs a slot: intraday or post-close (got {slot!r})")
+        daily_due(slot)
+        return 0
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", help="path to the screener export CSV")
     src.add_argument("--latest", action="store_true",
@@ -401,6 +495,8 @@ def main() -> int:
                          "no merge / dashboard / publish. The frozen weekly panel is untouched.")
     ap.add_argument("--selftest", action="store_true",
                     help="check the slot and anchor date rules and stop (touches nothing)")
+    ap.add_argument("--due", choices=("intraday", "post-close"),
+                    help="print DUE or SKIP for that reminder slot and stop (touches nothing)")
     a = ap.parse_args()
 
     if a.latest:
